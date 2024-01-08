@@ -1,0 +1,477 @@
+---
+title: "Stat Seminar Project Data Exploration"
+author: "Joe Coyne"
+date: "`r Sys.Date()`"
+output: word_document
+---
+
+```{r}
+rmarkdown::render("Stat Seminar Project Data Input.Rmd")
+```
+
+
+## Correlation matrix of variables
+
+### 2002-2003 Season
+```{r}
+cor_initial_03 <- cor(data_2003 %>%
+                        mutate(PostW = as.numeric(PostW), TeamID = as.numeric(TeamID)) %>% 
+                        dplyr::select(is.numeric))
+
+corrplot(cor_initial_03, type = "upper",
+         method = "circle",
+         tl.col = "black",
+         diag = FALSE)
+
+mtext(
+  text = "Correlogram of 2002-2003 Data", 
+  side = 1,
+  line = -4,
+  at = 0,
+  cex = 0.8,
+  font = 2)
+```
+
+Variable Importance
+```{r}
+varimp_03 <- data.frame(Correlation_with_PostW = abs(cor_initial_03[, "PostW"])) %>% 
+  arrange(desc(Correlation_with_PostW)) %>%
+  rename(Abs_Correlation_with_PostW = Correlation_with_PostW)
+varimp_03
+```
+
+
+
+### 2018-2019 Season
+```{r}
+cor_initial_19 <- cor(data_2019 %>%
+                        mutate(PostW = as.numeric(PostW), TeamID = as.numeric(TeamID)) %>% 
+                        dplyr::select(is.numeric))
+
+corrplot(cor_initial_19, type = "upper",
+         method = "circle",
+         tl.col = "black",
+         diag = FALSE)
+
+mtext(
+  text = "Correlogram of 2018-2019 Data", 
+  side = 1,
+  line = -4,
+  at = 0,
+  cex = 0.8,
+  font = 2)
+```
+
+Variable Importance
+```{r}
+varimp_19 <- data.frame(Correlation_with_PostW = abs(cor_initial_19[, "PostW"])) %>% 
+  arrange(desc(Correlation_with_PostW)) %>%
+  rename(Abs_Correlation_with_PostW = Correlation_with_PostW)
+varimp_19
+```
+
+Change in importance in PostW (from '02-'03 to '18-'19)  - HAVE TO EDIT THIS!!
+```{r}
+varimp_change <- cor_initial_19[, "PostW"] - cor_initial_03[, "PostW"] %>% 
+  as.data.frame() %>% 
+  rename(Cor = ".")
+
+varimp_change %>% 
+  arrange(desc(Cor)) %>% 
+  rename(Change_in_Correlation_with_PostW = Cor)
+```
+
+### All Seasons
+```{r}
+cor_initial_03 <- cor(data_2003 %>%
+                        mutate(PostW = as.numeric(PostW), TeamID = as.numeric(TeamID)) %>% 
+                        dplyr::select(is.numeric))
+cor_initial_04 <- cor(data_2004 %>%
+                        mutate(PostW = as.numeric(PostW), TeamID = as.numeric(TeamID)) %>% 
+                        dplyr::select(is.numeric))
+cor_initial_05 <- cor(data_2005 %>%
+                        mutate(PostW = as.numeric(PostW), TeamID = as.numeric(TeamID)) %>% 
+                        dplyr::select(is.numeric))
+cor_initial_06 <- cor(data_2006 %>%
+                        mutate(PostW = as.numeric(PostW), TeamID = as.numeric(TeamID)) %>% 
+                        dplyr::select(is.numeric))
+cor_initial_07 <- cor(data_2007 %>%
+                        mutate(PostW = as.numeric(PostW), TeamID = as.numeric(TeamID)) %>% 
+                        dplyr::select(is.numeric))
+cor_initial_08 <- cor(data_2008 %>%
+                        mutate(PostW = as.numeric(PostW), TeamID = as.numeric(TeamID)) %>% 
+                        dplyr::select(is.numeric))
+cor_initial_09 <- cor(data_2009 %>%
+                        mutate(PostW = as.numeric(PostW), TeamID = as.numeric(TeamID)) %>% 
+                        dplyr::select(is.numeric))
+cor_initial_10 <- cor(data_2010 %>%
+                        mutate(PostW = as.numeric(PostW), TeamID = as.numeric(TeamID)) %>% 
+                        dplyr::select(is.numeric))
+cor_initial_11 <- cor(data_2011 %>%
+                        mutate(PostW = as.numeric(PostW), TeamID = as.numeric(TeamID)) %>% 
+                        dplyr::select(is.numeric))
+cor_initial_12 <- cor(data_2012 %>%
+                        mutate(PostW = as.numeric(PostW), TeamID = as.numeric(TeamID)) %>% 
+                        dplyr::select(is.numeric))
+cor_initial_13 <- cor(data_2013 %>%
+                        mutate(PostW = as.numeric(PostW), TeamID = as.numeric(TeamID)) %>% 
+                        dplyr::select(is.numeric))
+cor_initial_14 <- cor(data_2014 %>%
+                        mutate(PostW = as.numeric(PostW), TeamID = as.numeric(TeamID)) %>% 
+                        dplyr::select(is.numeric))
+cor_initial_15 <- cor(data_2015 %>%
+                        mutate(PostW = as.numeric(PostW), TeamID = as.numeric(TeamID)) %>% 
+                        dplyr::select(is.numeric))
+cor_initial_16 <- cor(data_2016 %>%
+                        mutate(PostW = as.numeric(PostW), TeamID = as.numeric(TeamID)) %>% 
+                        dplyr::select(is.numeric))
+cor_initial_17 <- cor(data_2017 %>%
+                        mutate(PostW = as.numeric(PostW), TeamID = as.numeric(TeamID)) %>% 
+                        dplyr::select(is.numeric))
+cor_initial_18 <- cor(data_2018 %>%
+                        mutate(PostW = as.numeric(PostW), TeamID = as.numeric(TeamID)) %>% 
+                        dplyr::select(is.numeric))
+cor_initial_19 <- cor(data_2019 %>%
+                        mutate(PostW = as.numeric(PostW), TeamID = as.numeric(TeamID)) %>% 
+                        dplyr::select(is.numeric))
+```
+
+
+## Variable Importance by Year
+```{r}
+varimp_03 <- data.frame(Correlation_with_PostW = abs(cor_initial_03[, "PostW"])) %>% 
+  arrange(desc(Correlation_with_PostW)) %>%
+  rename(Abs_Correlation_with_PostW = Correlation_with_PostW)
+varimp_04 <- data.frame(Correlation_with_PostW = abs(cor_initial_04[, "PostW"])) %>% 
+  arrange(desc(Correlation_with_PostW)) %>%
+  rename(Abs_Correlation_with_PostW = Correlation_with_PostW)
+varimp_05 <- data.frame(Correlation_with_PostW = abs(cor_initial_05[, "PostW"])) %>% 
+  arrange(desc(Correlation_with_PostW)) %>%
+  rename(Abs_Correlation_with_PostW = Correlation_with_PostW)
+varimp_06 <- data.frame(Correlation_with_PostW = abs(cor_initial_06[, "PostW"])) %>% 
+  arrange(desc(Correlation_with_PostW)) %>%
+  rename(Abs_Correlation_with_PostW = Correlation_with_PostW)
+varimp_07 <- data.frame(Correlation_with_PostW = abs(cor_initial_07[, "PostW"])) %>% 
+  arrange(desc(Correlation_with_PostW)) %>%
+  rename(Abs_Correlation_with_PostW = Correlation_with_PostW)
+varimp_08 <- data.frame(Correlation_with_PostW = abs(cor_initial_08[, "PostW"])) %>% 
+  arrange(desc(Correlation_with_PostW)) %>%
+  rename(Abs_Correlation_with_PostW = Correlation_with_PostW)
+varimp_09 <- data.frame(Correlation_with_PostW = abs(cor_initial_09[, "PostW"])) %>% 
+  arrange(desc(Correlation_with_PostW)) %>%
+  rename(Abs_Correlation_with_PostW = Correlation_with_PostW)
+varimp_10 <- data.frame(Correlation_with_PostW = abs(cor_initial_10[, "PostW"])) %>% 
+  arrange(desc(Correlation_with_PostW)) %>%
+  rename(Abs_Correlation_with_PostW = Correlation_with_PostW)
+varimp_11 <- data.frame(Correlation_with_PostW = abs(cor_initial_11[, "PostW"])) %>% 
+  arrange(desc(Correlation_with_PostW)) %>%
+  rename(Abs_Correlation_with_PostW = Correlation_with_PostW)
+varimp_12 <- data.frame(Correlation_with_PostW = abs(cor_initial_12[, "PostW"])) %>% 
+  arrange(desc(Correlation_with_PostW)) %>%
+  rename(Abs_Correlation_with_PostW = Correlation_with_PostW)
+varimp_13 <- data.frame(Correlation_with_PostW = abs(cor_initial_13[, "PostW"])) %>% 
+  arrange(desc(Correlation_with_PostW)) %>%
+  rename(Abs_Correlation_with_PostW = Correlation_with_PostW)
+varimp_14 <- data.frame(Correlation_with_PostW = abs(cor_initial_14[, "PostW"])) %>% 
+  arrange(desc(Correlation_with_PostW)) %>%
+  rename(Abs_Correlation_with_PostW = Correlation_with_PostW)
+varimp_15 <- data.frame(Correlation_with_PostW = abs(cor_initial_15[, "PostW"])) %>% 
+  arrange(desc(Correlation_with_PostW)) %>%
+  rename(Abs_Correlation_with_PostW = Correlation_with_PostW)
+varimp_16 <- data.frame(Correlation_with_PostW = abs(cor_initial_16[, "PostW"])) %>% 
+  arrange(desc(Correlation_with_PostW)) %>%
+  rename(Abs_Correlation_with_PostW = Correlation_with_PostW)
+varimp_17 <- data.frame(Correlation_with_PostW = abs(cor_initial_17[, "PostW"])) %>% 
+  arrange(desc(Correlation_with_PostW)) %>%
+  rename(Abs_Correlation_with_PostW = Correlation_with_PostW)
+varimp_18 <- data.frame(Correlation_with_PostW = abs(cor_initial_18[, "PostW"])) %>% 
+  arrange(desc(Correlation_with_PostW)) %>%
+  rename(Abs_Correlation_with_PostW = Correlation_with_PostW)
+varimp_19 <- data.frame(Correlation_with_PostW = abs(cor_initial_19[, "PostW"])) %>% 
+  arrange(desc(Correlation_with_PostW)) %>%
+  rename(Abs_Correlation_with_PostW = Correlation_with_PostW)
+```
+
+### Top 5 Important Variables
+```{r}
+# i want to find the top 5 variables not including PostW that are correlated with PostW in each year, and make a final table summarizing how many times each variable is listed in the top 5
+
+top_variables_list <- list()
+
+for (i in 3:19) {
+  varimp_list <- get(paste0("varimp_", sprintf("%02d", i)))
+  top_variables <- head(varimp_list, 6)
+  top_variables_list[[i - 2]] <- top_variables
+}
+# good up until here
+
+all_top_variables <- unlist(top_variables_list)
+
+variable_counts <- table(all_top_variables)
+
+```
+
+
+## Basic Data Visualization
+### 2002-2003 Season
+```{r}
+# Wins
+data_2003 %>% 
+  ggplot() +
+  geom_histogram(aes(x = Wins), bins = 29)
+```
+
+```{r}
+# Losses
+data_2003 %>% 
+  ggplot() +
+  geom_histogram(aes(x = Losses), bins = 25)
+```
+
+```{r}
+# Total Num OT
+data_2003 %>% 
+  ggplot() +
+  geom_histogram(aes(x = total_NumOT), bins = 12)
+```
+
+```{r}
+# Total pts
+data_2003 %>% 
+  ggplot() +
+  geom_histogram(aes(x = total_pts))
+```
+
+```{r}
+# Total FGM
+data_2003 %>% 
+  ggplot() +
+  geom_histogram(aes(x = total_FGM))
+```
+
+```{r}
+# Total FGA
+data_2003 %>% 
+  ggplot() +
+  geom_histogram(aes(x = total_FGA))
+```
+
+```{r}
+# Total FGM3
+data_2003 %>% 
+  ggplot() +
+  geom_histogram(aes(x = total_FGM3))
+```
+
+```{r}
+# Total FGA3
+data_2003 %>% 
+  ggplot() +
+  geom_histogram(aes(x = total_FGA3), bins = 40)
+```
+
+```{r}
+# Total FTM
+data_2003 %>% 
+  ggplot() +
+  geom_histogram(aes(x = total_FTM))
+```
+
+```{r}
+# Total FTA
+data_2003 %>% 
+  ggplot() +
+  geom_histogram(aes(x = total_FTA))
+```
+
+```{r}
+# Total Off Reb
+data_2003 %>% 
+  ggplot() +
+  geom_histogram(aes(x = total_OffReb))
+```
+
+```{r}
+# Total Def Reb
+data_2003 %>% 
+  ggplot() +
+  geom_histogram(aes(x = total_DefReb))
+```
+
+```{r}
+# Total Ast
+data_2003 %>% 
+  ggplot() +
+  geom_histogram(aes(x = total_Ast))
+```
+
+```{r}
+# Total TO
+data_2003 %>% 
+  ggplot() +
+  geom_histogram(aes(x = total_TO))
+```
+
+```{r}
+# Total Stl
+data_2003 %>% 
+  ggplot() +
+  geom_histogram(aes(x = total_Stl))
+```
+
+```{r}
+# Total Blk
+data_2003 %>% 
+  ggplot() +
+  geom_histogram(aes(x = total_Blk))
+```
+
+```{r}
+# Total PF
+data_2003 %>% 
+  ggplot() +
+  geom_histogram(aes(x = total_PF))
+```
+
+```{r}
+# Total PostW
+data_2003 %>% 
+  mutate(PostW = as.numeric(PostW)) %>% 
+  ggplot() +
+  geom_histogram(aes(x = PostW), bins = 7) + theme(plot.title = element_text(hjust = 0.5)) +labs(title = "Frequency of Postseason Wins - 2003 NCAA Tournament",
+    y = "Count")
+```
+
+
+
+### 2018-2019 Season
+```{r}
+# Wins
+data_2019 %>% 
+  ggplot() +
+  geom_histogram(aes(x = Wins), bins = 25)
+```
+
+```{r}
+# Losses
+data_2019 %>% 
+  ggplot() +
+  geom_histogram(aes(x = Losses), bins = 25)
+```
+
+```{r}
+# Total Num OT
+data_2019 %>% 
+  ggplot() +
+  geom_histogram(aes(x = total_NumOT), bins = 3)
+```
+
+```{r}
+# Total pts
+data_2019 %>% 
+  ggplot() +
+  geom_histogram(aes(x = total_pts))
+```
+
+```{r}
+# Total FGM
+data_2019 %>% 
+  ggplot() +
+  geom_histogram(aes(x = total_FGM))
+```
+
+```{r}
+# Total FGA
+data_2019 %>% 
+  ggplot() +
+  geom_histogram(aes(x = total_FGA))
+```
+
+```{r}
+# Total FGM3
+data_2019 %>% 
+  ggplot() +
+  geom_histogram(aes(x = total_FGM3))
+```
+
+```{r}
+# Total FGA3
+data_2019 %>% 
+  ggplot() +
+  geom_histogram(aes(x = total_FGA3), bins = 40)
+```
+
+```{r}
+# Total FTM
+data_2019 %>% 
+  ggplot() +
+  geom_histogram(aes(x = total_FTM))
+```
+
+```{r}
+# Total FTA
+data_2019 %>% 
+  ggplot() +
+  geom_histogram(aes(x = total_FTA))
+```
+
+```{r}
+# Total Off Reb
+data_2019 %>% 
+  ggplot() +
+  geom_histogram(aes(x = total_OffReb))
+```
+
+```{r}
+# Total Def Reb
+data_2019 %>% 
+  ggplot() +
+  geom_histogram(aes(x = total_DefReb))
+```
+
+```{r}
+# Total Ast
+data_2019 %>% 
+  ggplot() +
+  geom_histogram(aes(x = total_Ast))
+```
+
+```{r}
+# Total TO
+data_2019 %>% 
+  ggplot() +
+  geom_histogram(aes(x = total_TO))
+```
+
+```{r}
+# Total Stl
+data_2019 %>% 
+  ggplot() +
+  geom_histogram(aes(x = total_Stl))
+```
+
+```{r}
+# Total Blk
+data_2019 %>% 
+  ggplot() +
+  geom_histogram(aes(x = total_Blk))
+```
+
+```{r}
+# Total PF
+data_2019 %>% 
+  ggplot() +
+  geom_histogram(aes(x = total_PF))
+```
+
+```{r}
+# Total PostW
+data_2019 %>% 
+  mutate(PostW = as.numeric(PostW)) %>% 
+  ggplot() +
+  geom_histogram(aes(x = PostW), bins = 7) + theme(plot.title = element_text(hjust = 0.5)) +labs(title = "Frequency of Postseason Wins - 2019 NCAA Tournament",
+    y = "Count")
+```
+
+
+

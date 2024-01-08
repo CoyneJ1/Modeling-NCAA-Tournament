@@ -1,0 +1,2389 @@
+---
+title: "Stat Seminar Project Data Input"
+author: "Joe Coyne"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(corrplot)
+library(tidyselect)
+library(readxl)
+```
+
+For graphics at end, maybe use TeamColors package, geom_image?
+
+```{r}
+reg_season <- read.csv("MRegularSeasonDetailedResults.csv")
+
+march_madness_0 <- read.csv("MNCAATourneyDetailedResults.csv")
+
+teams <- read.csv("MTeams.csv")
+```
+
+**Note** -> Pace, ORtg, STL%, ORB% not recorded until 2009-2010 season
+
+```{r}
+teams <- teams %>% 
+  mutate(WTeamID = TeamID) %>% 
+  mutate(LTeamID = TeamID) %>% 
+  dplyr::select(-c("FirstD1Season", "LastD1Season"))
+```
+
+```{r}
+merged_data <- merge(reg_season, teams, by.x = "WTeamID", by.y = "TeamID", all.x = T)
+
+names(merged_data)[names(merged_data) == "TeamName"] <- "Winning_Team"
+```
+
+```{r}
+merged_data <- merge(merged_data, teams, by.x = "LTeamID.x", by.y = "TeamID", all.x = TRUE)
+
+names(merged_data)[names(merged_data) == "TeamName"] <- "Losing_Team"
+```
+
+```{r}
+merged_final <- merged_data[-c(1, 2, 37, 39, 41, 42, 43)]
+
+win <- merged_final %>% 
+  dplyr::select(c("Season", "DayNum", "NumOT") | starts_with("W")) %>% 
+  group_by(Winning_Team) %>% 
+  arrange(Winning_Team) %>% 
+  rename(WTeamID = WTeamID.y) %>% 
+  dplyr::select(Season, Winning_Team, WTeamID, everything())
+
+loss <- merged_final %>% 
+  dplyr::select(c("Season", "DayNum", "NumOT") | starts_with("L")) %>% 
+  group_by(Losing_Team) %>% 
+  arrange(Losing_Team) %>% 
+  dplyr::select(Season, Losing_Team, LTeamID, everything())
+```
+
+
+```{r}
+mmteams <- teams %>% 
+  dplyr::select(TeamName, WTeamID, LTeamID)
+
+march_madness <- march_madness_0 %>% 
+  dplyr::select(Season, WTeamID, LTeamID) %>% 
+  full_join(mmteams, by = "WTeamID") %>% 
+  rename(LTeamID = LTeamID.x, WTeam_Name = TeamName) %>% 
+  full_join(mmteams, by = "LTeamID") %>% 
+  rename(WTeamID = WTeamID.x, LTeam_Name = TeamName) %>% 
+  rename(WTeam_NameID = LTeamID.y, LTeam_NameID = WTeamID.y) %>%
+  filter(complete.cases(Season))
+```
+
+## Separating MM by Year
+```{r}
+mm2003_0 <- march_madness %>% 
+  filter(Season == 2003)
+mm2004_0 <- march_madness %>% 
+  filter(Season == 2004)
+mm2005_0 <- march_madness %>% 
+  filter(Season == 2005)
+mm2006_0 <- march_madness %>% 
+  filter(Season == 2006)
+mm2007_0 <- march_madness %>% 
+  filter(Season == 2007)
+mm2008_0 <- march_madness %>% 
+  filter(Season == 2008)
+mm2009_0 <- march_madness %>% 
+  filter(Season == 2009)
+mm2010_0 <- march_madness %>% 
+  filter(Season == 2010)
+mm2011_0 <- march_madness %>% 
+  filter(Season == 2011)
+mm2012_0 <- march_madness %>% 
+  filter(Season == 2012)
+mm2013_0 <- march_madness %>% 
+  filter(Season == 2013)
+mm2014_0 <- march_madness %>% 
+  filter(Season == 2014)
+mm2015_0 <- march_madness %>% 
+  filter(Season == 2015)
+mm2016_0 <- march_madness %>% 
+  filter(Season == 2016)
+mm2017_0 <- march_madness %>% 
+  filter(Season == 2017)
+mm2018_0 <- march_madness %>% 
+  filter(Season == 2018)
+mm2019_0 <- march_madness %>% 
+  filter(Season == 2019)
+```
+
+```{r}
+mm2003_0 %>% 
+  group_by(Team_Name = WTeam_Name) %>% 
+  summarize(PostW = n()) %>% 
+  right_join(mm2003_0, by = c("Team_Name" = "WTeam_Name")) %>% 
+  dplyr::select(Season, Team_Name, WTeamID, LTeamID, PostW) %>% 
+  distinct(Team_Name, .keep_all = TRUE) %>% 
+  right_join(mm2003_0 %>% dplyr::select(LTeamID, LTeam_Name), by = "LTeamID") %>% 
+  filter(complete.cases(Season)) %>% 
+  bind_rows(
+    mm2003_0 %>% 
+      mutate(
+        Team_Name = ifelse(!LTeam_Name %in% mm2003_0$Team_Name, LTeam_Name, Team_Name),
+        WTeamID = ifelse(!LTeamID %in% mm2003_0$WTeamID, LTeamID, WTeamID),
+        PostW = NA
+      ) %>% 
+      dplyr::select(Season, Team_Name, WTeamID, LTeamID, PostW) %>% 
+      filter(complete.cases(Season))) %>% 
+  filter(!duplicated(Team_Name) | !is.na(PostW)) %>% # Keep only unique Team_Name or rows with a value in PostW
+  rename(TeamID = WTeamID) %>% 
+  dplyr::select(Season, TeamID, Team_Name, PostW) %>% 
+  mutate(PostW = replace_na(PostW, 0)) %>% 
+  arrange(desc(PostW))
+```
+
+
+### Creating PostW Variable
+```{r}
+mm2003 <- mm2003_0 %>% 
+  group_by(Team_Name = WTeam_Name) %>% 
+  summarize(PostW = n()) %>% 
+  right_join(mm2003_0, by = c("Team_Name" = "WTeam_Name")) %>% 
+  dplyr::select(Season, Team_Name, WTeamID, LTeamID, PostW) %>% 
+  distinct(Team_Name, .keep_all = TRUE) %>% 
+  right_join(mm2003_0 %>% dplyr::select(LTeamID, LTeam_Name), by = "LTeamID") %>% 
+  filter(complete.cases(Season)) %>% 
+  bind_rows(
+    mm2003_0 %>% 
+      mutate(
+        Team_Name = ifelse(!LTeam_Name %in% mm2003_0$Team_Name, LTeam_Name, Team_Name),
+        WTeamID = ifelse(!LTeamID %in% mm2003_0$WTeamID, LTeamID, WTeamID),
+        PostW = NA
+      ) %>% 
+      dplyr::select(Season, Team_Name, WTeamID, LTeamID, PostW) %>% 
+      filter(complete.cases(Season))) %>% 
+  filter(!duplicated(Team_Name) | !is.na(PostW)) %>% # Keep only unique Team_Name or rows with a value in PostW
+  rename(TeamID = WTeamID) %>% 
+  dplyr::select(Season, TeamID, Team_Name, PostW) %>% 
+  mutate(PostW = replace_na(PostW, 0)) %>% 
+  arrange(desc(PostW))
+
+mm2004 <- mm2004_0 %>% 
+  group_by(Team_Name = WTeam_Name) %>% 
+  summarize(PostW = n()) %>% 
+  right_join(mm2004_0, by = c("Team_Name" = "WTeam_Name")) %>% 
+  dplyr::select(Season, Team_Name, WTeamID, LTeamID, PostW) %>% 
+  distinct(Team_Name, .keep_all = TRUE) %>% 
+  right_join(mm2004_0 %>% dplyr::select(LTeamID, LTeam_Name), by = "LTeamID") %>% 
+  filter(complete.cases(Season)) %>% 
+  bind_rows(
+    mm2004_0 %>% 
+      mutate(
+        Team_Name = ifelse(!LTeam_Name %in% mm2004_0$Team_Name, LTeam_Name, Team_Name),
+        WTeamID = ifelse(!LTeamID %in% mm2004_0$WTeamID, LTeamID, WTeamID),
+        PostW = NA
+      ) %>% 
+      dplyr::select(Season, Team_Name, WTeamID, LTeamID, PostW) %>% 
+      filter(complete.cases(Season))) %>% 
+  filter(!duplicated(Team_Name) | !is.na(PostW)) %>% # Keep only unique Team_Name or rows with a value in PostW
+  rename(TeamID = WTeamID) %>% 
+  dplyr::select(Season, TeamID, Team_Name, PostW) %>% 
+  mutate(PostW = replace_na(PostW, 0)) %>% 
+  arrange(desc(PostW))
+
+mm2005 <- mm2005_0 %>% 
+  group_by(Team_Name = WTeam_Name) %>% 
+  summarize(PostW = n()) %>% 
+  right_join(mm2005_0, by = c("Team_Name" = "WTeam_Name")) %>% 
+  dplyr::select(Season, Team_Name, WTeamID, LTeamID, PostW) %>% 
+  distinct(Team_Name, .keep_all = TRUE) %>% 
+  right_join(mm2005_0 %>% dplyr::select(LTeamID, LTeam_Name), by = "LTeamID") %>% 
+  filter(complete.cases(Season)) %>% 
+  bind_rows(
+    mm2005_0 %>% 
+      mutate(
+        Team_Name = ifelse(!LTeam_Name %in% mm2005_0$Team_Name, LTeam_Name, Team_Name),
+        WTeamID = ifelse(!LTeamID %in% mm2005_0$WTeamID, LTeamID, WTeamID),
+        PostW = NA
+      ) %>% 
+      dplyr::select(Season, Team_Name, WTeamID, LTeamID, PostW) %>% 
+      filter(complete.cases(Season))) %>% 
+  filter(!duplicated(Team_Name) | !is.na(PostW)) %>% # Keep only unique Team_Name or rows with a value in PostW
+  rename(TeamID = WTeamID) %>% 
+  dplyr::select(Season, TeamID, Team_Name, PostW) %>% 
+  mutate(PostW = replace_na(PostW, 0)) %>% 
+  arrange(desc(PostW))
+
+mm2006 <- mm2006_0 %>% 
+  group_by(Team_Name = WTeam_Name) %>% 
+  summarize(PostW = n()) %>% 
+  right_join(mm2006_0, by = c("Team_Name" = "WTeam_Name")) %>% 
+  dplyr::select(Season, Team_Name, WTeamID, LTeamID, PostW) %>% 
+  distinct(Team_Name, .keep_all = TRUE) %>% 
+  right_join(mm2006_0 %>% dplyr::select(LTeamID, LTeam_Name), by = "LTeamID") %>% 
+  filter(complete.cases(Season)) %>% 
+  bind_rows(
+    mm2006_0 %>% 
+      mutate(
+        Team_Name = ifelse(!LTeam_Name %in% mm2006_0$Team_Name, LTeam_Name, Team_Name),
+        WTeamID = ifelse(!LTeamID %in% mm2006_0$WTeamID, LTeamID, WTeamID),
+        PostW = NA
+      ) %>% 
+      dplyr::select(Season, Team_Name, WTeamID, LTeamID, PostW) %>% 
+      filter(complete.cases(Season))) %>% 
+  filter(!duplicated(Team_Name) | !is.na(PostW)) %>% # Keep only unique Team_Name or rows with a value in PostW
+  rename(TeamID = WTeamID) %>% 
+  dplyr::select(Season, TeamID, Team_Name, PostW) %>% 
+  mutate(PostW = replace_na(PostW, 0)) %>% 
+  arrange(desc(PostW))
+
+mm2007 <- mm2007_0 %>% 
+  group_by(Team_Name = WTeam_Name) %>% 
+  summarize(PostW = n()) %>% 
+  right_join(mm2007_0, by = c("Team_Name" = "WTeam_Name")) %>% 
+  dplyr::select(Season, Team_Name, WTeamID, LTeamID, PostW) %>% 
+  distinct(Team_Name, .keep_all = TRUE) %>% 
+  right_join(mm2007_0 %>% dplyr::select(LTeamID, LTeam_Name), by = "LTeamID") %>% 
+  filter(complete.cases(Season)) %>% 
+  bind_rows(
+    mm2007_0 %>% 
+      mutate(
+        Team_Name = ifelse(!LTeam_Name %in% mm2007_0$Team_Name, LTeam_Name, Team_Name),
+        WTeamID = ifelse(!LTeamID %in% mm2007_0$WTeamID, LTeamID, WTeamID),
+        PostW = NA
+      ) %>% 
+      dplyr::select(Season, Team_Name, WTeamID, LTeamID, PostW) %>% 
+      filter(complete.cases(Season))) %>% 
+  filter(!duplicated(Team_Name) | !is.na(PostW)) %>% # Keep only unique Team_Name or rows with a value in PostW
+  rename(TeamID = WTeamID) %>% 
+  dplyr::select(Season, TeamID, Team_Name, PostW) %>% 
+  mutate(PostW = replace_na(PostW, 0)) %>% 
+  arrange(desc(PostW))
+
+mm2008 <- mm2008_0 %>% 
+  group_by(Team_Name = WTeam_Name) %>% 
+  summarize(PostW = n()) %>% 
+  right_join(mm2008_0, by = c("Team_Name" = "WTeam_Name")) %>% 
+  dplyr::select(Season, Team_Name, WTeamID, LTeamID, PostW) %>% 
+  distinct(Team_Name, .keep_all = TRUE) %>% 
+  right_join(mm2008_0 %>% dplyr::select(LTeamID, LTeam_Name), by = "LTeamID") %>% 
+  filter(complete.cases(Season)) %>% 
+  bind_rows(
+    mm2008_0 %>% 
+      mutate(
+        Team_Name = ifelse(!LTeam_Name %in% mm2008_0$Team_Name, LTeam_Name, Team_Name),
+        WTeamID = ifelse(!LTeamID %in% mm2008_0$WTeamID, LTeamID, WTeamID),
+        PostW = NA
+      ) %>% 
+      dplyr::select(Season, Team_Name, WTeamID, LTeamID, PostW) %>% 
+      filter(complete.cases(Season))) %>% 
+  filter(!duplicated(Team_Name) | !is.na(PostW)) %>% # Keep only unique Team_Name or rows with a value in PostW
+  rename(TeamID = WTeamID) %>% 
+  dplyr::select(Season, TeamID, Team_Name, PostW) %>% 
+  mutate(PostW = replace_na(PostW, 0)) %>% 
+  arrange(desc(PostW))
+
+mm2009 <- mm2009_0 %>% 
+  group_by(Team_Name = WTeam_Name) %>% 
+  summarize(PostW = n()) %>% 
+  right_join(mm2009_0, by = c("Team_Name" = "WTeam_Name")) %>% 
+  dplyr::select(Season, Team_Name, WTeamID, LTeamID, PostW) %>% 
+  distinct(Team_Name, .keep_all = TRUE) %>% 
+  right_join(mm2009_0 %>% dplyr::select(LTeamID, LTeam_Name), by = "LTeamID") %>% 
+  filter(complete.cases(Season)) %>% 
+  bind_rows(
+    mm2009_0 %>% 
+      mutate(
+        Team_Name = ifelse(!LTeam_Name %in% mm2009_0$Team_Name, LTeam_Name, Team_Name),
+        WTeamID = ifelse(!LTeamID %in% mm2009_0$WTeamID, LTeamID, WTeamID),
+        PostW = NA
+      ) %>% 
+      dplyr::select(Season, Team_Name, WTeamID, LTeamID, PostW) %>% 
+      filter(complete.cases(Season))) %>% 
+  filter(!duplicated(Team_Name) | !is.na(PostW)) %>% # Keep only unique Team_Name or rows with a value in PostW
+  rename(TeamID = WTeamID) %>% 
+  dplyr::select(Season, TeamID, Team_Name, PostW) %>% 
+  mutate(PostW = replace_na(PostW, 0)) %>% 
+  arrange(desc(PostW))
+
+mm2010 <- mm2010_0 %>% 
+  group_by(Team_Name = WTeam_Name) %>% 
+  summarize(PostW = n()) %>% 
+  right_join(mm2010_0, by = c("Team_Name" = "WTeam_Name")) %>% 
+  dplyr::select(Season, Team_Name, WTeamID, LTeamID, PostW) %>% 
+  distinct(Team_Name, .keep_all = TRUE) %>% 
+  right_join(mm2010_0 %>% dplyr::select(LTeamID, LTeam_Name), by = "LTeamID") %>% 
+  filter(complete.cases(Season)) %>% 
+  bind_rows(
+    mm2010_0 %>% 
+      mutate(
+        Team_Name = ifelse(!LTeam_Name %in% mm2010_0$Team_Name, LTeam_Name, Team_Name),
+        WTeamID = ifelse(!LTeamID %in% mm2010_0$WTeamID, LTeamID, WTeamID),
+        PostW = NA
+      ) %>% 
+      dplyr::select(Season, Team_Name, WTeamID, LTeamID, PostW) %>% 
+      filter(complete.cases(Season))) %>% 
+  filter(!duplicated(Team_Name) | !is.na(PostW)) %>% # Keep only unique Team_Name or rows with a value in PostW
+  rename(TeamID = WTeamID) %>% 
+  dplyr::select(Season, TeamID, Team_Name, PostW) %>% 
+  mutate(PostW = replace_na(PostW, 0)) %>% 
+  arrange(desc(PostW))
+
+mm2011 <- mm2011_0 %>% 
+  group_by(Team_Name = WTeam_Name) %>% 
+  summarize(PostW = n()) %>% 
+  right_join(mm2011_0, by = c("Team_Name" = "WTeam_Name")) %>% 
+  dplyr::select(Season, Team_Name, WTeamID, LTeamID, PostW) %>% 
+  distinct(Team_Name, .keep_all = TRUE) %>% 
+  right_join(mm2011_0 %>% dplyr::select(LTeamID, LTeam_Name), by = "LTeamID") %>% 
+  filter(complete.cases(Season)) %>% 
+  bind_rows(
+    mm2011_0 %>% 
+      mutate(
+        Team_Name = ifelse(!LTeam_Name %in% mm2011_0$Team_Name, LTeam_Name, Team_Name),
+        WTeamID = ifelse(!LTeamID %in% mm2011_0$WTeamID, LTeamID, WTeamID),
+        PostW = NA
+      ) %>% 
+      dplyr::select(Season, Team_Name, WTeamID, LTeamID, PostW) %>% 
+      filter(complete.cases(Season))) %>% 
+  filter(!duplicated(Team_Name) | !is.na(PostW)) %>% # Keep only unique Team_Name or rows with a value in PostW
+  rename(TeamID = WTeamID) %>% 
+  dplyr::select(Season, TeamID, Team_Name, PostW) %>% 
+  mutate(PostW = replace_na(PostW, 0)) %>% 
+  arrange(desc(PostW))
+
+mm2012 <- mm2012_0 %>% 
+  group_by(Team_Name = WTeam_Name) %>% 
+  summarize(PostW = n()) %>% 
+  right_join(mm2012_0, by = c("Team_Name" = "WTeam_Name")) %>% 
+  dplyr::select(Season, Team_Name, WTeamID, LTeamID, PostW) %>% 
+  distinct(Team_Name, .keep_all = TRUE) %>% 
+  right_join(mm2012_0 %>% dplyr::select(LTeamID, LTeam_Name), by = "LTeamID") %>% 
+  filter(complete.cases(Season)) %>% 
+  bind_rows(
+    mm2012_0 %>% 
+      mutate(
+        Team_Name = ifelse(!LTeam_Name %in% mm2012_0$Team_Name, LTeam_Name, Team_Name),
+        WTeamID = ifelse(!LTeamID %in% mm2012_0$WTeamID, LTeamID, WTeamID),
+        PostW = NA
+      ) %>% 
+      dplyr::select(Season, Team_Name, WTeamID, LTeamID, PostW) %>% 
+      filter(complete.cases(Season))) %>% 
+  filter(!duplicated(Team_Name) | !is.na(PostW)) %>% # Keep only unique Team_Name or rows with a value in PostW
+  rename(TeamID = WTeamID) %>% 
+  dplyr::select(Season, TeamID, Team_Name, PostW) %>% 
+  mutate(PostW = replace_na(PostW, 0)) %>% 
+  arrange(desc(PostW))
+
+mm2013 <- mm2013_0 %>% 
+  group_by(Team_Name = WTeam_Name) %>% 
+  summarize(PostW = n()) %>% 
+  right_join(mm2013_0, by = c("Team_Name" = "WTeam_Name")) %>% 
+  dplyr::select(Season, Team_Name, WTeamID, LTeamID, PostW) %>% 
+  distinct(Team_Name, .keep_all = TRUE) %>% 
+  right_join(mm2013_0 %>% dplyr::select(LTeamID, LTeam_Name), by = "LTeamID") %>% 
+  filter(complete.cases(Season)) %>% 
+  bind_rows(
+    mm2013_0 %>% 
+      mutate(
+        Team_Name = ifelse(!LTeam_Name %in% mm2013_0$Team_Name, LTeam_Name, Team_Name),
+        WTeamID = ifelse(!LTeamID %in% mm2013_0$WTeamID, LTeamID, WTeamID),
+        PostW = NA
+      ) %>% 
+      dplyr::select(Season, Team_Name, WTeamID, LTeamID, PostW) %>% 
+      filter(complete.cases(Season))) %>% 
+  filter(!duplicated(Team_Name) | !is.na(PostW)) %>% # Keep only unique Team_Name or rows with a value in PostW
+  rename(TeamID = WTeamID) %>% 
+  dplyr::select(Season, TeamID, Team_Name, PostW) %>% 
+  mutate(PostW = replace_na(PostW, 0)) %>% 
+  arrange(desc(PostW))
+
+mm2014 <- mm2014_0 %>% 
+  group_by(Team_Name = WTeam_Name) %>% 
+  summarize(PostW = n()) %>% 
+  right_join(mm2014_0, by = c("Team_Name" = "WTeam_Name")) %>% 
+  dplyr::select(Season, Team_Name, WTeamID, LTeamID, PostW) %>% 
+  distinct(Team_Name, .keep_all = TRUE) %>% 
+  right_join(mm2014_0 %>% dplyr::select(LTeamID, LTeam_Name), by = "LTeamID") %>% 
+  filter(complete.cases(Season)) %>% 
+  bind_rows(
+    mm2014_0 %>% 
+      mutate(
+        Team_Name = ifelse(!LTeam_Name %in% mm2014_0$Team_Name, LTeam_Name, Team_Name),
+        WTeamID = ifelse(!LTeamID %in% mm2014_0$WTeamID, LTeamID, WTeamID),
+        PostW = NA
+      ) %>% 
+      dplyr::select(Season, Team_Name, WTeamID, LTeamID, PostW) %>% 
+      filter(complete.cases(Season))) %>% 
+  filter(!duplicated(Team_Name) | !is.na(PostW)) %>% # Keep only unique Team_Name or rows with a value in PostW
+  rename(TeamID = WTeamID) %>% 
+  dplyr::select(Season, TeamID, Team_Name, PostW) %>% 
+  mutate(PostW = replace_na(PostW, 0)) %>% 
+  arrange(desc(PostW))
+
+mm2015 <- mm2015_0 %>% 
+  group_by(Team_Name = WTeam_Name) %>% 
+  summarize(PostW = n()) %>% 
+  right_join(mm2015_0, by = c("Team_Name" = "WTeam_Name")) %>% 
+  dplyr::select(Season, Team_Name, WTeamID, LTeamID, PostW) %>% 
+  distinct(Team_Name, .keep_all = TRUE) %>% 
+  right_join(mm2015_0 %>% dplyr::select(LTeamID, LTeam_Name), by = "LTeamID") %>% 
+  filter(complete.cases(Season)) %>% 
+  bind_rows(
+    mm2015_0 %>% 
+      mutate(
+        Team_Name = ifelse(!LTeam_Name %in% mm2015_0$Team_Name, LTeam_Name, Team_Name),
+        WTeamID = ifelse(!LTeamID %in% mm2015_0$WTeamID, LTeamID, WTeamID),
+        PostW = NA
+      ) %>% 
+      dplyr::select(Season, Team_Name, WTeamID, LTeamID, PostW) %>% 
+      filter(complete.cases(Season))) %>% 
+  filter(!duplicated(Team_Name) | !is.na(PostW)) %>% # Keep only unique Team_Name or rows with a value in PostW
+  rename(TeamID = WTeamID) %>% 
+  dplyr::select(Season, TeamID, Team_Name, PostW) %>% 
+  mutate(PostW = replace_na(PostW, 0)) %>% 
+  arrange(desc(PostW))
+
+mm2016 <- mm2016_0 %>% 
+  group_by(Team_Name = WTeam_Name) %>% 
+  summarize(PostW = n()) %>% 
+  right_join(mm2016_0, by = c("Team_Name" = "WTeam_Name")) %>% 
+  dplyr::select(Season, Team_Name, WTeamID, LTeamID, PostW) %>% 
+  distinct(Team_Name, .keep_all = TRUE) %>% 
+  right_join(mm2016_0 %>% dplyr::select(LTeamID, LTeam_Name), by = "LTeamID") %>% 
+  filter(complete.cases(Season)) %>% 
+  bind_rows(
+    mm2016_0 %>% 
+      mutate(
+        Team_Name = ifelse(!LTeam_Name %in% mm2016_0$Team_Name, LTeam_Name, Team_Name),
+        WTeamID = ifelse(!LTeamID %in% mm2016_0$WTeamID, LTeamID, WTeamID),
+        PostW = NA
+      ) %>% 
+      dplyr::select(Season, Team_Name, WTeamID, LTeamID, PostW) %>% 
+      filter(complete.cases(Season))) %>% 
+  filter(!duplicated(Team_Name) | !is.na(PostW)) %>% # Keep only unique Team_Name or rows with a value in PostW
+  rename(TeamID = WTeamID) %>% 
+  dplyr::select(Season, TeamID, Team_Name, PostW) %>% 
+  mutate(PostW = replace_na(PostW, 0)) %>% 
+  arrange(desc(PostW))
+
+mm2017 <- mm2017_0 %>% 
+  group_by(Team_Name = WTeam_Name) %>% 
+  summarize(PostW = n()) %>% 
+  right_join(mm2017_0, by = c("Team_Name" = "WTeam_Name")) %>% 
+  dplyr::select(Season, Team_Name, WTeamID, LTeamID, PostW) %>% 
+  distinct(Team_Name, .keep_all = TRUE) %>% 
+  right_join(mm2017_0 %>% dplyr::select(LTeamID, LTeam_Name), by = "LTeamID") %>% 
+  filter(complete.cases(Season)) %>% 
+  bind_rows(
+    mm2017_0 %>% 
+      mutate(
+        Team_Name = ifelse(!LTeam_Name %in% mm2017_0$Team_Name, LTeam_Name, Team_Name),
+        WTeamID = ifelse(!LTeamID %in% mm2017_0$WTeamID, LTeamID, WTeamID),
+        PostW = NA
+      ) %>% 
+      dplyr::select(Season, Team_Name, WTeamID, LTeamID, PostW) %>% 
+      filter(complete.cases(Season))) %>% 
+  filter(!duplicated(Team_Name) | !is.na(PostW)) %>% # Keep only unique Team_Name or rows with a value in PostW
+  rename(TeamID = WTeamID) %>% 
+  dplyr::select(Season, TeamID, Team_Name, PostW) %>% 
+  mutate(PostW = replace_na(PostW, 0)) %>% 
+  arrange(desc(PostW))
+
+mm2018 <- mm2018_0 %>% 
+  group_by(Team_Name = WTeam_Name) %>% 
+  summarize(PostW = n()) %>% 
+  right_join(mm2018_0, by = c("Team_Name" = "WTeam_Name")) %>% 
+  dplyr::select(Season, Team_Name, WTeamID, LTeamID, PostW) %>% 
+  distinct(Team_Name, .keep_all = TRUE) %>% 
+  right_join(mm2018_0 %>% dplyr::select(LTeamID, LTeam_Name), by = "LTeamID") %>% 
+  filter(complete.cases(Season)) %>% 
+  bind_rows(
+    mm2018_0 %>% 
+      mutate(
+        Team_Name = ifelse(!LTeam_Name %in% mm2018_0$Team_Name, LTeam_Name, Team_Name),
+        WTeamID = ifelse(!LTeamID %in% mm2018_0$WTeamID, LTeamID, WTeamID),
+        PostW = NA
+      ) %>% 
+      dplyr::select(Season, Team_Name, WTeamID, LTeamID, PostW) %>% 
+      filter(complete.cases(Season))) %>% 
+  filter(!duplicated(Team_Name) | !is.na(PostW)) %>% # Keep only unique Team_Name or rows with a value in PostW
+  rename(TeamID = WTeamID) %>% 
+  dplyr::select(Season, TeamID, Team_Name, PostW) %>% 
+  mutate(PostW = replace_na(PostW, 0)) %>% 
+  arrange(desc(PostW))
+
+mm2019 <- mm2019_0 %>% 
+  group_by(Team_Name = WTeam_Name) %>% 
+  summarize(PostW = n()) %>% 
+  right_join(mm2019_0, by = c("Team_Name" = "WTeam_Name")) %>% 
+  dplyr::select(Season, Team_Name, WTeamID, LTeamID, PostW) %>% 
+  distinct(Team_Name, .keep_all = TRUE) %>% 
+  right_join(mm2019_0 %>% dplyr::select(LTeamID, LTeam_Name), by = "LTeamID") %>% 
+  filter(complete.cases(Season)) %>% 
+  bind_rows(
+    mm2019_0 %>% 
+      mutate(
+        Team_Name = ifelse(!LTeam_Name %in% mm2019_0$Team_Name, LTeam_Name, Team_Name),
+        WTeamID = ifelse(!LTeamID %in% mm2019_0$WTeamID, LTeamID, WTeamID),
+        PostW = NA
+      ) %>% 
+      dplyr::select(Season, Team_Name, WTeamID, LTeamID, PostW) %>% 
+      filter(complete.cases(Season))) %>% 
+  filter(!duplicated(Team_Name) | !is.na(PostW)) %>% # Keep only unique Team_Name or rows with a value in PostW
+  rename(TeamID = WTeamID) %>% 
+  dplyr::select(Season, TeamID, Team_Name, PostW) %>% 
+  mutate(PostW = replace_na(PostW, 0)) %>% 
+  arrange(desc(PostW))
+```
+
+
+## Correlation matrix of variables (reg season)
+
+```{r}
+cor_initial <- cor(reg_season %>% 
+  dplyr::select(is.numeric & starts_with("W") & !c("WTeamID")))
+
+corrplot(cor_initial, type = "upper",
+         method = "circle",
+         tl.col = "black",
+         diag = FALSE)
+
+mtext(
+  text = "Correlogram of Regular Season Data", 
+  side = 1,
+  line = -4,
+  at = 0,
+  cex = 0.8,
+  font = 2)
+```
+
+```{r}
+# cor_initial2 <- cor(march_madness %>% 
+#   dplyr::select(is.numeric & starts_with("W") & !c("WTeamID")))
+# 
+# corrplot(cor_initial2, type = "upper",
+#          method = "circle",
+#          tl.col = "black",
+#          diag = FALSE)
+# 
+# mtext(
+#   text = "Correlogram of Postseason Data", 
+#   side = 1,
+#   line = -4,
+#   at = 0,
+#   cex = 0.8,
+#   font = 2)
+```
+
+## Separating Reg Season by Year
+
+### Win
+
+```{r}
+win_2003_0 <- win %>% 
+  filter(Season == 2003)
+win_2004_0 <- win %>% 
+  filter(Season == 2004)
+win_2005_0 <- win %>% 
+  filter(Season == 2005)
+win_2006_0 <- win %>% 
+  filter(Season == 2006)
+win_2007_0 <- win %>% 
+  filter(Season == 2007)
+win_2008_0 <- win %>% 
+  filter(Season == 2008)
+win_2009_0 <- win %>% 
+  filter(Season == 2009)
+win_2010_0 <- win %>% 
+  filter(Season == 2010)
+win_2011_0 <- win %>% 
+  filter(Season == 2011)
+win_2012_0 <- win %>% 
+  filter(Season == 2012)
+win_2013_0 <- win %>% 
+  filter(Season == 2013)
+win_2014_0 <- win %>% 
+  filter(Season == 2014)
+win_2015_0 <- win %>% 
+  filter(Season == 2015)
+win_2016_0 <- win %>% 
+  filter(Season == 2016)
+win_2017_0 <- win %>% 
+  filter(Season == 2017)
+win_2018_0 <- win %>% 
+  filter(Season == 2018)
+win_2019_0 <- win %>% 
+  filter(Season == 2019)
+win_2020_0 <- win %>% 
+  filter(Season == 2020)
+```
+
+### Loss
+
+```{r}
+loss_2003_0 <- loss %>% 
+  filter(Season == 2003)
+loss_2004_0 <- loss %>% 
+  filter(Season == 2004)
+loss_2005_0 <- loss %>% 
+  filter(Season == 2005)
+loss_2006_0 <- loss %>% 
+  filter(Season == 2006)
+loss_2007_0 <- loss %>% 
+  filter(Season == 2007)
+loss_2008_0 <- loss %>% 
+  filter(Season == 2008)
+loss_2009_0 <- loss %>% 
+  filter(Season == 2009)
+loss_2010_0 <- loss %>% 
+  filter(Season == 2010)
+loss_2011_0 <- loss %>% 
+  filter(Season == 2011)
+loss_2012_0 <- loss %>% 
+  filter(Season == 2012)
+loss_2013_0 <- loss %>% 
+  filter(Season == 2013)
+loss_2014_0 <- loss %>% 
+  filter(Season == 2014)
+loss_2015_0 <- loss %>% 
+  filter(Season == 2015)
+loss_2016_0 <- loss %>% 
+  filter(Season == 2016)
+loss_2017_0 <- loss %>% 
+  filter(Season == 2017)
+loss_2018_0 <- loss %>% 
+  filter(Season == 2018)
+loss_2019_0 <- loss %>% 
+  filter(Season == 2019)
+loss_2020_0 <- loss %>% 
+  filter(Season == 2020)
+```
+
+## Adding Regular Season W and L
+
+### Win
+
+```{r}
+win_2003_1 <- win_2003_0 %>% 
+  mutate(Wins = 1, Losses = 0)
+
+win_2004_1 <- win_2004_0 %>% 
+  mutate(Wins = 1, Losses = 0)
+
+win_2005_1 <- win_2005_0 %>% 
+  mutate(Wins = 1, Losses = 0)
+
+win_2006_1 <- win_2006_0 %>% 
+  mutate(Wins = 1, Losses = 0)
+
+win_2007_1 <- win_2007_0 %>% 
+  mutate(Wins = 1, Losses = 0)
+
+win_2008_1 <- win_2008_0 %>% 
+  mutate(Wins = 1, Losses = 0)
+
+win_2009_1 <- win_2009_0 %>% 
+  mutate(Wins = 1, Losses = 0)
+
+win_2010_1 <- win_2010_0 %>% 
+  mutate(Wins = 1, Losses = 0)
+
+win_2011_1 <- win_2011_0 %>% 
+  mutate(Wins = 1, Losses = 0)
+
+win_2012_1 <- win_2012_0 %>% 
+  mutate(Wins = 1, Losses = 0)
+
+win_2013_1 <- win_2013_0 %>% 
+  mutate(Wins = 1, Losses = 0)
+
+win_2014_1 <- win_2014_0 %>% 
+  mutate(Wins = 1, Losses = 0)
+
+win_2015_1 <- win_2015_0 %>% 
+  mutate(Wins = 1, Losses = 0)
+
+win_2016_1 <- win_2016_0 %>% 
+  mutate(Wins = 1, Losses = 0)
+
+win_2017_1 <- win_2017_0 %>% 
+  mutate(Wins = 1, Losses = 0)
+
+win_2018_1 <- win_2018_0 %>% 
+  mutate(Wins = 1, Losses = 0)
+
+win_2019_1 <- win_2019_0 %>% 
+  mutate(Wins = 1, Losses = 0)
+
+win_2020_1 <- win_2020_0 %>% 
+  mutate(Wins = 1, Losses = 0)
+```
+
+### Loss
+
+```{r}
+loss_2003_1 <- loss_2003_0 %>% 
+  mutate(Wins = 0, Losses = 1)
+
+loss_2004_1 <- loss_2004_0 %>% 
+  mutate(Wins = 0, Losses = 1)
+
+loss_2005_1 <- loss_2005_0 %>% 
+  mutate(Wins = 0, Losses = 1)
+
+loss_2006_1 <- loss_2006_0 %>% 
+  mutate(Wins = 0, Losses = 1)
+
+loss_2007_1 <- loss_2007_0 %>% 
+  mutate(Wins = 0, Losses = 1)
+
+loss_2008_1 <- loss_2008_0 %>% 
+  mutate(Wins = 0, Losses = 1)
+
+loss_2009_1 <- loss_2009_0 %>% 
+  mutate(Wins = 0, Losses = 1)
+
+loss_2010_1 <- loss_2010_0 %>% 
+  mutate(Wins = 0, Losses = 1)
+
+loss_2011_1 <- loss_2011_0 %>% 
+  mutate(Wins = 0, Losses = 1)
+
+loss_2012_1 <- loss_2012_0 %>% 
+  mutate(Wins = 0, Losses = 1)
+
+loss_2013_1 <- loss_2013_0 %>% 
+  mutate(Wins = 0, Losses = 1)
+
+loss_2014_1 <- loss_2014_0 %>% 
+  mutate(Wins = 0, Losses = 1)
+
+loss_2015_1 <- loss_2015_0 %>% 
+  mutate(Wins = 0, Losses = 1)
+
+loss_2016_1 <- loss_2016_0 %>% 
+  mutate(Wins = 0, Losses = 1)
+
+loss_2017_1 <- loss_2017_0 %>% 
+  mutate(Wins = 0, Losses = 1)
+
+loss_2018_1 <- loss_2018_0 %>% 
+  mutate(Wins = 0, Losses = 1)
+
+loss_2019_1 <- loss_2019_0 %>% 
+  mutate(Wins = 0, Losses = 1)
+
+loss_2020_1 <- loss_2020_0 %>% 
+  mutate(Wins = 0, Losses = 1)
+```
+
+## Summarizing by Year
+
+### Win
+
+```{r}
+win_2003 <- win_2003_1 %>%
+  group_by(WTeamID, Winning_Team) %>% 
+  summarize(
+    Season = unique(Season),
+    Wins = sum(Wins),
+    Losses = sum(Losses),
+    total_NumOT = sum(NumOT),
+    total_pts = sum(WScore),
+    total_FGM = sum(WFGM),
+    total_FGA = sum(WFGA),
+    total_FGM3 = sum(WFGM3),
+    total_FGA3 = sum(WFGA3),
+    total_FTM = sum(WFTM),
+    total_FTA = sum(WFTA),
+    total_OffReb = sum(WOR),
+    total_DefReb = sum(WDR),
+    total_Ast = sum(WAst),
+    total_TO = sum(WTO),
+    total_Stl = sum(WStl),
+    total_Blk = sum(WBlk),
+    total_PF = sum(WPF)) %>% 
+  rename(TeamID = WTeamID, Team_Name = Winning_Team)
+
+win_2004 <- win_2004_1 %>%
+  group_by(WTeamID, Winning_Team) %>% 
+  summarize(
+    Season = unique(Season),
+    Wins = sum(Wins),
+    Losses = sum(Losses),
+    total_NumOT = sum(NumOT),
+    total_pts = sum(WScore),
+    total_FGM = sum(WFGM),
+    total_FGA = sum(WFGA),
+    total_FGM3 = sum(WFGM3),
+    total_FGA3 = sum(WFGA3),
+    total_FTM = sum(WFTM),
+    total_FTA = sum(WFTA),
+    total_OffReb = sum(WOR),
+    total_DefReb = sum(WDR),
+    total_Ast = sum(WAst),
+    total_TO = sum(WTO),
+    total_Stl = sum(WStl),
+    total_Blk = sum(WBlk),
+    total_PF = sum(WPF)) %>% 
+  rename(TeamID = WTeamID, Team_Name = Winning_Team)
+
+win_2005 <- win_2005_1 %>%
+  group_by(WTeamID, Winning_Team) %>% 
+  summarize(
+    Season = unique(Season),
+    Wins = sum(Wins),
+    Losses = sum(Losses),
+    total_NumOT = sum(NumOT),
+    total_pts = sum(WScore),
+    total_FGM = sum(WFGM),
+    total_FGA = sum(WFGA),
+    total_FGM3 = sum(WFGM3),
+    total_FGA3 = sum(WFGA3),
+    total_FTM = sum(WFTM),
+    total_FTA = sum(WFTA),
+    total_OffReb = sum(WOR),
+    total_DefReb = sum(WDR),
+    total_Ast = sum(WAst),
+    total_TO = sum(WTO),
+    total_Stl = sum(WStl),
+    total_Blk = sum(WBlk),
+    total_PF = sum(WPF)) %>% 
+  rename(TeamID = WTeamID, Team_Name = Winning_Team)
+
+win_2006 <- win_2006_1 %>%
+  group_by(WTeamID, Winning_Team) %>% 
+  summarize(
+    Season = unique(Season),
+    Wins = sum(Wins),
+    Losses = sum(Losses),
+    total_NumOT = sum(NumOT),
+    total_pts = sum(WScore),
+    total_FGM = sum(WFGM),
+    total_FGA = sum(WFGA),
+    total_FGM3 = sum(WFGM3),
+    total_FGA3 = sum(WFGA3),
+    total_FTM = sum(WFTM),
+    total_FTA = sum(WFTA),
+    total_OffReb = sum(WOR),
+    total_DefReb = sum(WDR),
+    total_Ast = sum(WAst),
+    total_TO = sum(WTO),
+    total_Stl = sum(WStl),
+    total_Blk = sum(WBlk),
+    total_PF = sum(WPF)) %>% 
+  rename(TeamID = WTeamID, Team_Name = Winning_Team)
+
+win_2007 <- win_2007_1 %>%
+  group_by(WTeamID, Winning_Team) %>% 
+  summarize(
+    Season = unique(Season),
+    Wins = sum(Wins),
+    Losses = sum(Losses),
+    total_NumOT = sum(NumOT),
+    total_pts = sum(WScore),
+    total_FGM = sum(WFGM),
+    total_FGA = sum(WFGA),
+    total_FGM3 = sum(WFGM3),
+    total_FGA3 = sum(WFGA3),
+    total_FTM = sum(WFTM),
+    total_FTA = sum(WFTA),
+    total_OffReb = sum(WOR),
+    total_DefReb = sum(WDR),
+    total_Ast = sum(WAst),
+    total_TO = sum(WTO),
+    total_Stl = sum(WStl),
+    total_Blk = sum(WBlk),
+    total_PF = sum(WPF)) %>% 
+  rename(TeamID = WTeamID, Team_Name = Winning_Team)
+
+win_2008 <- win_2008_1 %>%
+  group_by(WTeamID, Winning_Team) %>% 
+  summarize(
+    Season = unique(Season),
+    Wins = sum(Wins),
+    Losses = sum(Losses),
+    total_NumOT = sum(NumOT),
+    total_pts = sum(WScore),
+    total_FGM = sum(WFGM),
+    total_FGA = sum(WFGA),
+    total_FGM3 = sum(WFGM3),
+    total_FGA3 = sum(WFGA3),
+    total_FTM = sum(WFTM),
+    total_FTA = sum(WFTA),
+    total_OffReb = sum(WOR),
+    total_DefReb = sum(WDR),
+    total_Ast = sum(WAst),
+    total_TO = sum(WTO),
+    total_Stl = sum(WStl),
+    total_Blk = sum(WBlk),
+    total_PF = sum(WPF)) %>% 
+  rename(TeamID = WTeamID, Team_Name = Winning_Team)
+
+win_2009 <- win_2009_1 %>%
+  group_by(WTeamID, Winning_Team) %>% 
+  summarize(
+    Season = unique(Season),
+    Wins = sum(Wins),
+    Losses = sum(Losses),
+    total_NumOT = sum(NumOT),
+    total_pts = sum(WScore),
+    total_FGM = sum(WFGM),
+    total_FGA = sum(WFGA),
+    total_FGM3 = sum(WFGM3),
+    total_FGA3 = sum(WFGA3),
+    total_FTM = sum(WFTM),
+    total_FTA = sum(WFTA),
+    total_OffReb = sum(WOR),
+    total_DefReb = sum(WDR),
+    total_Ast = sum(WAst),
+    total_TO = sum(WTO),
+    total_Stl = sum(WStl),
+    total_Blk = sum(WBlk),
+    total_PF = sum(WPF)) %>% 
+  rename(TeamID = WTeamID, Team_Name = Winning_Team)
+
+win_2010 <- win_2010_1 %>%
+  group_by(WTeamID, Winning_Team) %>% 
+  summarize(
+    Season = unique(Season),
+    Wins = sum(Wins),
+    Losses = sum(Losses),
+    total_NumOT = sum(NumOT),
+    total_pts = sum(WScore),
+    total_FGM = sum(WFGM),
+    total_FGA = sum(WFGA),
+    total_FGM3 = sum(WFGM3),
+    total_FGA3 = sum(WFGA3),
+    total_FTM = sum(WFTM),
+    total_FTA = sum(WFTA),
+    total_OffReb = sum(WOR),
+    total_DefReb = sum(WDR),
+    total_Ast = sum(WAst),
+    total_TO = sum(WTO),
+    total_Stl = sum(WStl),
+    total_Blk = sum(WBlk),
+    total_PF = sum(WPF)) %>% 
+  rename(TeamID = WTeamID, Team_Name = Winning_Team)
+
+win_2011 <- win_2011_1 %>%
+  group_by(WTeamID, Winning_Team) %>% 
+  summarize(
+    Season = unique(Season),
+    Wins = sum(Wins),
+    Losses = sum(Losses),
+    total_NumOT = sum(NumOT),
+    total_pts = sum(WScore),
+    total_FGM = sum(WFGM),
+    total_FGA = sum(WFGA),
+    total_FGM3 = sum(WFGM3),
+    total_FGA3 = sum(WFGA3),
+    total_FTM = sum(WFTM),
+    total_FTA = sum(WFTA),
+    total_OffReb = sum(WOR),
+    total_DefReb = sum(WDR),
+    total_Ast = sum(WAst),
+    total_TO = sum(WTO),
+    total_Stl = sum(WStl),
+    total_Blk = sum(WBlk),
+    total_PF = sum(WPF)) %>% 
+  rename(TeamID = WTeamID, Team_Name = Winning_Team)
+
+win_2012 <- win_2012_1 %>%
+  group_by(WTeamID, Winning_Team) %>% 
+  summarize(
+    Season = unique(Season),
+    Wins = sum(Wins),
+    Losses = sum(Losses),
+    total_NumOT = sum(NumOT),
+    total_pts = sum(WScore),
+    total_FGM = sum(WFGM),
+    total_FGA = sum(WFGA),
+    total_FGM3 = sum(WFGM3),
+    total_FGA3 = sum(WFGA3),
+    total_FTM = sum(WFTM),
+    total_FTA = sum(WFTA),
+    total_OffReb = sum(WOR),
+    total_DefReb = sum(WDR),
+    total_Ast = sum(WAst),
+    total_TO = sum(WTO),
+    total_Stl = sum(WStl),
+    total_Blk = sum(WBlk),
+    total_PF = sum(WPF)) %>% 
+  rename(TeamID = WTeamID, Team_Name = Winning_Team)
+
+win_2013 <- win_2013_1 %>%
+  group_by(WTeamID, Winning_Team) %>% 
+  summarize(
+    Season = unique(Season),
+    Wins = sum(Wins),
+    Losses = sum(Losses),
+    total_NumOT = sum(NumOT),
+    total_pts = sum(WScore),
+    total_FGM = sum(WFGM),
+    total_FGA = sum(WFGA),
+    total_FGM3 = sum(WFGM3),
+    total_FGA3 = sum(WFGA3),
+    total_FTM = sum(WFTM),
+    total_FTA = sum(WFTA),
+    total_OffReb = sum(WOR),
+    total_DefReb = sum(WDR),
+    total_Ast = sum(WAst),
+    total_TO = sum(WTO),
+    total_Stl = sum(WStl),
+    total_Blk = sum(WBlk),
+    total_PF = sum(WPF)) %>% 
+  rename(TeamID = WTeamID, Team_Name = Winning_Team)
+
+win_2014 <- win_2014_1 %>%
+  group_by(WTeamID, Winning_Team) %>% 
+  summarize(
+    Season = unique(Season),
+    Wins = sum(Wins),
+    Losses = sum(Losses),
+    total_NumOT = sum(NumOT),
+    total_pts = sum(WScore),
+    total_FGM = sum(WFGM),
+    total_FGA = sum(WFGA),
+    total_FGM3 = sum(WFGM3),
+    total_FGA3 = sum(WFGA3),
+    total_FTM = sum(WFTM),
+    total_FTA = sum(WFTA),
+    total_OffReb = sum(WOR),
+    total_DefReb = sum(WDR),
+    total_Ast = sum(WAst),
+    total_TO = sum(WTO),
+    total_Stl = sum(WStl),
+    total_Blk = sum(WBlk),
+    total_PF = sum(WPF)) %>% 
+  rename(TeamID = WTeamID, Team_Name = Winning_Team)
+
+win_2015 <- win_2015_1 %>%
+  group_by(WTeamID, Winning_Team) %>% 
+  summarize(
+    Season = unique(Season),
+    Wins = sum(Wins),
+    Losses = sum(Losses),
+    total_NumOT = sum(NumOT),
+    total_pts = sum(WScore),
+    total_FGM = sum(WFGM),
+    total_FGA = sum(WFGA),
+    total_FGM3 = sum(WFGM3),
+    total_FGA3 = sum(WFGA3),
+    total_FTM = sum(WFTM),
+    total_FTA = sum(WFTA),
+    total_OffReb = sum(WOR),
+    total_DefReb = sum(WDR),
+    total_Ast = sum(WAst),
+    total_TO = sum(WTO),
+    total_Stl = sum(WStl),
+    total_Blk = sum(WBlk),
+    total_PF = sum(WPF)) %>% 
+  rename(TeamID = WTeamID, Team_Name = Winning_Team)
+
+win_2016 <- win_2016_1 %>%
+  group_by(WTeamID, Winning_Team) %>% 
+  summarize(
+    Season = unique(Season),
+    Wins = sum(Wins),
+    Losses = sum(Losses),
+    total_NumOT = sum(NumOT),
+    total_pts = sum(WScore),
+    total_FGM = sum(WFGM),
+    total_FGA = sum(WFGA),
+    total_FGM3 = sum(WFGM3),
+    total_FGA3 = sum(WFGA3),
+    total_FTM = sum(WFTM),
+    total_FTA = sum(WFTA),
+    total_OffReb = sum(WOR),
+    total_DefReb = sum(WDR),
+    total_Ast = sum(WAst),
+    total_TO = sum(WTO),
+    total_Stl = sum(WStl),
+    total_Blk = sum(WBlk),
+    total_PF = sum(WPF)) %>% 
+  rename(TeamID = WTeamID, Team_Name = Winning_Team)
+
+win_2017 <- win_2017_1 %>%
+  group_by(WTeamID, Winning_Team) %>% 
+  summarize(
+    Season = unique(Season),
+    Wins = sum(Wins),
+    Losses = sum(Losses),
+    total_NumOT = sum(NumOT),
+    total_pts = sum(WScore),
+    total_FGM = sum(WFGM),
+    total_FGA = sum(WFGA),
+    total_FGM3 = sum(WFGM3),
+    total_FGA3 = sum(WFGA3),
+    total_FTM = sum(WFTM),
+    total_FTA = sum(WFTA),
+    total_OffReb = sum(WOR),
+    total_DefReb = sum(WDR),
+    total_Ast = sum(WAst),
+    total_TO = sum(WTO),
+    total_Stl = sum(WStl),
+    total_Blk = sum(WBlk),
+    total_PF = sum(WPF)) %>% 
+  rename(TeamID = WTeamID, Team_Name = Winning_Team)
+
+win_2018 <- win_2018_1 %>%
+  group_by(WTeamID, Winning_Team) %>% 
+  summarize(
+    Season = unique(Season),
+    Wins = sum(Wins),
+    Losses = sum(Losses),
+    total_NumOT = sum(NumOT),
+    total_pts = sum(WScore),
+    total_FGM = sum(WFGM),
+    total_FGA = sum(WFGA),
+    total_FGM3 = sum(WFGM3),
+    total_FGA3 = sum(WFGA3),
+    total_FTM = sum(WFTM),
+    total_FTA = sum(WFTA),
+    total_OffReb = sum(WOR),
+    total_DefReb = sum(WDR),
+    total_Ast = sum(WAst),
+    total_TO = sum(WTO),
+    total_Stl = sum(WStl),
+    total_Blk = sum(WBlk),
+    total_PF = sum(WPF)) %>% 
+  rename(TeamID = WTeamID, Team_Name = Winning_Team)
+
+win_2019 <- win_2019_1 %>%
+  group_by(WTeamID, Winning_Team) %>% 
+  summarize(
+    Season = unique(Season),
+    Wins = sum(Wins),
+    Losses = sum(Losses),
+    total_NumOT = sum(NumOT),
+    total_pts = sum(WScore),
+    total_FGM = sum(WFGM),
+    total_FGA = sum(WFGA),
+    total_FGM3 = sum(WFGM3),
+    total_FGA3 = sum(WFGA3),
+    total_FTM = sum(WFTM),
+    total_FTA = sum(WFTA),
+    total_OffReb = sum(WOR),
+    total_DefReb = sum(WDR),
+    total_Ast = sum(WAst),
+    total_TO = sum(WTO),
+    total_Stl = sum(WStl),
+    total_Blk = sum(WBlk),
+    total_PF = sum(WPF)) %>% 
+  rename(TeamID = WTeamID, Team_Name = Winning_Team)
+
+win_2020 <- win_2020_1 %>%
+  group_by(WTeamID, Winning_Team) %>% 
+  summarize(
+    Season = unique(Season),
+    Wins = sum(Wins),
+    Losses = sum(Losses),
+    total_NumOT = sum(NumOT),
+    total_pts = sum(WScore),
+    total_FGM = sum(WFGM),
+    total_FGA = sum(WFGA),
+    total_FGM3 = sum(WFGM3),
+    total_FGA3 = sum(WFGA3),
+    total_FTM = sum(WFTM),
+    total_FTA = sum(WFTA),
+    total_OffReb = sum(WOR),
+    total_DefReb = sum(WDR),
+    total_Ast = sum(WAst),
+    total_TO = sum(WTO),
+    total_Stl = sum(WStl),
+    total_Blk = sum(WBlk),
+    total_PF = sum(WPF)) %>% 
+  rename(TeamID = WTeamID, Team_Name = Winning_Team)
+```
+
+### Loss
+
+```{r}
+loss_2003 <- loss_2003_1 %>%
+  group_by(LTeamID, Losing_Team) %>% 
+  summarize(
+    Season = unique(Season),
+    Wins = sum(Wins),
+    Losses = sum(Losses),
+    total_NumOT = sum(NumOT),
+    total_pts = sum(LScore),
+    total_FGM = sum(LFGM),
+    total_FGA = sum(LFGA),
+    total_FGM3 = sum(LFGM3),
+    total_FGA3 = sum(LFGA3),
+    total_FTM = sum(LFTM),
+    total_FTA = sum(LFTA),
+    total_OffReb = sum(LOR),
+    total_DefReb = sum(LDR),
+    total_Ast = sum(LAst),
+    total_TO = sum(LTO),
+    total_Stl = sum(LStl),
+    total_Blk = sum(LBlk),
+    total_PF = sum(LPF)) %>% 
+  rename(TeamID = LTeamID, Team_Name = Losing_Team)
+
+loss_2004 <- loss_2004_1 %>%
+  group_by(LTeamID, Losing_Team) %>% 
+  summarize(
+    Season = unique(Season),
+    Wins = sum(Wins),
+    Losses = sum(Losses),
+    total_NumOT = sum(NumOT),
+    total_pts = sum(LScore),
+    total_FGM = sum(LFGM),
+    total_FGA = sum(LFGA),
+    total_FGM3 = sum(LFGM3),
+    total_FGA3 = sum(LFGA3),
+    total_FTM = sum(LFTM),
+    total_FTA = sum(LFTA),
+    total_OffReb = sum(LOR),
+    total_DefReb = sum(LDR),
+    total_Ast = sum(LAst),
+    total_TO = sum(LTO),
+    total_Stl = sum(LStl),
+    total_Blk = sum(LBlk),
+    total_PF = sum(LPF)) %>% 
+  rename(TeamID = LTeamID, Team_Name = Losing_Team)
+
+loss_2005 <- loss_2005_1 %>%
+  group_by(LTeamID, Losing_Team) %>% 
+  summarize(
+    Season = unique(Season),
+    Wins = sum(Wins),
+    Losses = sum(Losses),
+    total_NumOT = sum(NumOT),
+    total_pts = sum(LScore),
+    total_FGM = sum(LFGM),
+    total_FGA = sum(LFGA),
+    total_FGM3 = sum(LFGM3),
+    total_FGA3 = sum(LFGA3),
+    total_FTM = sum(LFTM),
+    total_FTA = sum(LFTA),
+    total_OffReb = sum(LOR),
+    total_DefReb = sum(LDR),
+    total_Ast = sum(LAst),
+    total_TO = sum(LTO),
+    total_Stl = sum(LStl),
+    total_Blk = sum(LBlk),
+    total_PF = sum(LPF)) %>% 
+  rename(TeamID = LTeamID, Team_Name = Losing_Team)
+
+loss_2006 <- loss_2006_1 %>%
+  group_by(LTeamID, Losing_Team) %>% 
+  summarize(
+    Season = unique(Season),
+    Wins = sum(Wins),
+    Losses = sum(Losses),
+    total_NumOT = sum(NumOT),
+    total_pts = sum(LScore),
+    total_FGM = sum(LFGM),
+    total_FGA = sum(LFGA),
+    total_FGM3 = sum(LFGM3),
+    total_FGA3 = sum(LFGA3),
+    total_FTM = sum(LFTM),
+    total_FTA = sum(LFTA),
+    total_OffReb = sum(LOR),
+    total_DefReb = sum(LDR),
+    total_Ast = sum(LAst),
+    total_TO = sum(LTO),
+    total_Stl = sum(LStl),
+    total_Blk = sum(LBlk),
+    total_PF = sum(LPF)) %>% 
+  rename(TeamID = LTeamID, Team_Name = Losing_Team)
+
+loss_2007 <- loss_2007_1 %>%
+  group_by(LTeamID, Losing_Team) %>% 
+  summarize(
+    Season = unique(Season),
+    Wins = sum(Wins),
+    Losses = sum(Losses),
+    total_NumOT = sum(NumOT),
+    total_pts = sum(LScore),
+    total_FGM = sum(LFGM),
+    total_FGA = sum(LFGA),
+    total_FGM3 = sum(LFGM3),
+    total_FGA3 = sum(LFGA3),
+    total_FTM = sum(LFTM),
+    total_FTA = sum(LFTA),
+    total_OffReb = sum(LOR),
+    total_DefReb = sum(LDR),
+    total_Ast = sum(LAst),
+    total_TO = sum(LTO),
+    total_Stl = sum(LStl),
+    total_Blk = sum(LBlk),
+    total_PF = sum(LPF)) %>% 
+  rename(TeamID = LTeamID, Team_Name = Losing_Team)
+
+loss_2008 <- loss_2008_1 %>%
+  group_by(LTeamID, Losing_Team) %>% 
+  summarize(
+    Season = unique(Season),
+    Wins = sum(Wins),
+    Losses = sum(Losses),
+    total_NumOT = sum(NumOT),
+    total_pts = sum(LScore),
+    total_FGM = sum(LFGM),
+    total_FGA = sum(LFGA),
+    total_FGM3 = sum(LFGM3),
+    total_FGA3 = sum(LFGA3),
+    total_FTM = sum(LFTM),
+    total_FTA = sum(LFTA),
+    total_OffReb = sum(LOR),
+    total_DefReb = sum(LDR),
+    total_Ast = sum(LAst),
+    total_TO = sum(LTO),
+    total_Stl = sum(LStl),
+    total_Blk = sum(LBlk),
+    total_PF = sum(LPF)) %>% 
+  rename(TeamID = LTeamID, Team_Name = Losing_Team)
+
+loss_2009 <- loss_2009_1 %>%
+  group_by(LTeamID, Losing_Team) %>% 
+  summarize(
+    Season = unique(Season),
+    Wins = sum(Wins),
+    Losses = sum(Losses),
+    total_NumOT = sum(NumOT),
+    total_pts = sum(LScore),
+    total_FGM = sum(LFGM),
+    total_FGA = sum(LFGA),
+    total_FGM3 = sum(LFGM3),
+    total_FGA3 = sum(LFGA3),
+    total_FTM = sum(LFTM),
+    total_FTA = sum(LFTA),
+    total_OffReb = sum(LOR),
+    total_DefReb = sum(LDR),
+    total_Ast = sum(LAst),
+    total_TO = sum(LTO),
+    total_Stl = sum(LStl),
+    total_Blk = sum(LBlk),
+    total_PF = sum(LPF)) %>% 
+  rename(TeamID = LTeamID, Team_Name = Losing_Team)
+
+loss_2010 <- loss_2010_1 %>%
+  group_by(LTeamID, Losing_Team) %>% 
+  summarize(
+    Season = unique(Season),
+    Wins = sum(Wins),
+    Losses = sum(Losses),
+    total_NumOT = sum(NumOT),
+    total_pts = sum(LScore),
+    total_FGM = sum(LFGM),
+    total_FGA = sum(LFGA),
+    total_FGM3 = sum(LFGM3),
+    total_FGA3 = sum(LFGA3),
+    total_FTM = sum(LFTM),
+    total_FTA = sum(LFTA),
+    total_OffReb = sum(LOR),
+    total_DefReb = sum(LDR),
+    total_Ast = sum(LAst),
+    total_TO = sum(LTO),
+    total_Stl = sum(LStl),
+    total_Blk = sum(LBlk),
+    total_PF = sum(LPF)) %>% 
+  rename(TeamID = LTeamID, Team_Name = Losing_Team)
+
+loss_2011 <- loss_2011_1 %>%
+  group_by(LTeamID, Losing_Team) %>% 
+  summarize(
+    Season = unique(Season),
+    Wins = sum(Wins),
+    Losses = sum(Losses),
+    total_NumOT = sum(NumOT),
+    total_pts = sum(LScore),
+    total_FGM = sum(LFGM),
+    total_FGA = sum(LFGA),
+    total_FGM3 = sum(LFGM3),
+    total_FGA3 = sum(LFGA3),
+    total_FTM = sum(LFTM),
+    total_FTA = sum(LFTA),
+    total_OffReb = sum(LOR),
+    total_DefReb = sum(LDR),
+    total_Ast = sum(LAst),
+    total_TO = sum(LTO),
+    total_Stl = sum(LStl),
+    total_Blk = sum(LBlk),
+    total_PF = sum(LPF)) %>% 
+  rename(TeamID = LTeamID, Team_Name = Losing_Team)
+
+loss_2012 <- loss_2012_1 %>%
+  group_by(LTeamID, Losing_Team) %>% 
+  summarize(
+    Season = unique(Season),
+    Wins = sum(Wins),
+    Losses = sum(Losses),
+    total_NumOT = sum(NumOT),
+    total_pts = sum(LScore),
+    total_FGM = sum(LFGM),
+    total_FGA = sum(LFGA),
+    total_FGM3 = sum(LFGM3),
+    total_FGA3 = sum(LFGA3),
+    total_FTM = sum(LFTM),
+    total_FTA = sum(LFTA),
+    total_OffReb = sum(LOR),
+    total_DefReb = sum(LDR),
+    total_Ast = sum(LAst),
+    total_TO = sum(LTO),
+    total_Stl = sum(LStl),
+    total_Blk = sum(LBlk),
+    total_PF = sum(LPF)) %>% 
+  rename(TeamID = LTeamID, Team_Name = Losing_Team)
+
+loss_2013 <- loss_2013_1 %>%
+  group_by(LTeamID, Losing_Team) %>% 
+  summarize(
+    Season = unique(Season),
+    Wins = sum(Wins),
+    Losses = sum(Losses),
+    total_NumOT = sum(NumOT),
+    total_pts = sum(LScore),
+    total_FGM = sum(LFGM),
+    total_FGA = sum(LFGA),
+    total_FGM3 = sum(LFGM3),
+    total_FGA3 = sum(LFGA3),
+    total_FTM = sum(LFTM),
+    total_FTA = sum(LFTA),
+    total_OffReb = sum(LOR),
+    total_DefReb = sum(LDR),
+    total_Ast = sum(LAst),
+    total_TO = sum(LTO),
+    total_Stl = sum(LStl),
+    total_Blk = sum(LBlk),
+    total_PF = sum(LPF)) %>% 
+  rename(TeamID = LTeamID, Team_Name = Losing_Team)
+
+loss_2014 <- loss_2014_1 %>%
+  group_by(LTeamID, Losing_Team) %>% 
+  summarize(
+    Season = unique(Season),
+    Wins = sum(Wins),
+    Losses = sum(Losses),
+    total_NumOT = sum(NumOT),
+    total_pts = sum(LScore),
+    total_FGM = sum(LFGM),
+    total_FGA = sum(LFGA),
+    total_FGM3 = sum(LFGM3),
+    total_FGA3 = sum(LFGA3),
+    total_FTM = sum(LFTM),
+    total_FTA = sum(LFTA),
+    total_OffReb = sum(LOR),
+    total_DefReb = sum(LDR),
+    total_Ast = sum(LAst),
+    total_TO = sum(LTO),
+    total_Stl = sum(LStl),
+    total_Blk = sum(LBlk),
+    total_PF = sum(LPF)) %>% 
+  rename(TeamID = LTeamID, Team_Name = Losing_Team)
+
+loss_2015 <- loss_2015_1 %>%
+  group_by(LTeamID, Losing_Team) %>% 
+  summarize(
+    Season = unique(Season),
+    Wins = sum(Wins),
+    Losses = sum(Losses),
+    total_NumOT = sum(NumOT),
+    total_pts = sum(LScore),
+    total_FGM = sum(LFGM),
+    total_FGA = sum(LFGA),
+    total_FGM3 = sum(LFGM3),
+    total_FGA3 = sum(LFGA3),
+    total_FTM = sum(LFTM),
+    total_FTA = sum(LFTA),
+    total_OffReb = sum(LOR),
+    total_DefReb = sum(LDR),
+    total_Ast = sum(LAst),
+    total_TO = sum(LTO),
+    total_Stl = sum(LStl),
+    total_Blk = sum(LBlk),
+    total_PF = sum(LPF)) %>% 
+  rename(TeamID = LTeamID, Team_Name = Losing_Team)
+
+loss_2016 <- loss_2016_1 %>%
+  group_by(LTeamID, Losing_Team) %>% 
+  summarize(
+    Season = unique(Season),
+    Wins = sum(Wins),
+    Losses = sum(Losses),
+    total_NumOT = sum(NumOT),
+    total_pts = sum(LScore),
+    total_FGM = sum(LFGM),
+    total_FGA = sum(LFGA),
+    total_FGM3 = sum(LFGM3),
+    total_FGA3 = sum(LFGA3),
+    total_FTM = sum(LFTM),
+    total_FTA = sum(LFTA),
+    total_OffReb = sum(LOR),
+    total_DefReb = sum(LDR),
+    total_Ast = sum(LAst),
+    total_TO = sum(LTO),
+    total_Stl = sum(LStl),
+    total_Blk = sum(LBlk),
+    total_PF = sum(LPF)) %>% 
+  rename(TeamID = LTeamID, Team_Name = Losing_Team)
+
+loss_2017 <- loss_2017_1 %>%
+  group_by(LTeamID, Losing_Team) %>% 
+  summarize(
+    Season = unique(Season),
+    Wins = sum(Wins),
+    Losses = sum(Losses),
+    total_NumOT = sum(NumOT),
+    total_pts = sum(LScore),
+    total_FGM = sum(LFGM),
+    total_FGA = sum(LFGA),
+    total_FGM3 = sum(LFGM3),
+    total_FGA3 = sum(LFGA3),
+    total_FTM = sum(LFTM),
+    total_FTA = sum(LFTA),
+    total_OffReb = sum(LOR),
+    total_DefReb = sum(LDR),
+    total_Ast = sum(LAst),
+    total_TO = sum(LTO),
+    total_Stl = sum(LStl),
+    total_Blk = sum(LBlk),
+    total_PF = sum(LPF)) %>% 
+  rename(TeamID = LTeamID, Team_Name = Losing_Team)
+
+loss_2018 <- loss_2018_1 %>%
+  group_by(LTeamID, Losing_Team) %>% 
+  summarize(
+    Season = unique(Season),
+    Wins = sum(Wins),
+    Losses = sum(Losses),
+    total_NumOT = sum(NumOT),
+    total_pts = sum(LScore),
+    total_FGM = sum(LFGM),
+    total_FGA = sum(LFGA),
+    total_FGM3 = sum(LFGM3),
+    total_FGA3 = sum(LFGA3),
+    total_FTM = sum(LFTM),
+    total_FTA = sum(LFTA),
+    total_OffReb = sum(LOR),
+    total_DefReb = sum(LDR),
+    total_Ast = sum(LAst),
+    total_TO = sum(LTO),
+    total_Stl = sum(LStl),
+    total_Blk = sum(LBlk),
+    total_PF = sum(LPF)) %>% 
+  rename(TeamID = LTeamID, Team_Name = Losing_Team)
+
+loss_2019 <- loss_2019_1 %>%
+  group_by(LTeamID, Losing_Team) %>% 
+  summarize(
+    Season = unique(Season),
+    Wins = sum(Wins),
+    Losses = sum(Losses),
+    total_NumOT = sum(NumOT),
+    total_pts = sum(LScore),
+    total_FGM = sum(LFGM),
+    total_FGA = sum(LFGA),
+    total_FGM3 = sum(LFGM3),
+    total_FGA3 = sum(LFGA3),
+    total_FTM = sum(LFTM),
+    total_FTA = sum(LFTA),
+    total_OffReb = sum(LOR),
+    total_DefReb = sum(LDR),
+    total_Ast = sum(LAst),
+    total_TO = sum(LTO),
+    total_Stl = sum(LStl),
+    total_Blk = sum(LBlk),
+    total_PF = sum(LPF)) %>% 
+  rename(TeamID = LTeamID, Team_Name = Losing_Team)
+
+loss_2020 <- loss_2020_1 %>%
+  group_by(LTeamID, Losing_Team) %>% 
+  summarize(
+    Season = unique(Season),
+    Wins = sum(Wins),
+    Losses = sum(Losses),
+    total_NumOT = sum(NumOT),
+    total_pts = sum(LScore),
+    total_FGM = sum(LFGM),
+    total_FGA = sum(LFGA),
+    total_FGM3 = sum(LFGM3),
+    total_FGA3 = sum(LFGA3),
+    total_FTM = sum(LFTM),
+    total_FTA = sum(LFTA),
+    total_OffReb = sum(LOR),
+    total_DefReb = sum(LDR),
+    total_Ast = sum(LAst),
+    total_TO = sum(LTO),
+    total_Stl = sum(LStl),
+    total_Blk = sum(LBlk),
+    total_PF = sum(LPF)) %>% 
+  rename(TeamID = LTeamID, Team_Name = Losing_Team)
+```
+
+## Combining Win and Loss Data
+
+```{r}
+data_2003_0 <- win_2003 %>% 
+  full_join(loss_2003, by = c("TeamID", "Team_Name")) %>% 
+  group_by(TeamID, Team_Name) %>% 
+  summarise(
+    Season = Season.x,
+    Wins = sum(Wins.x + Wins.y, na.rm = T),
+    Losses = sum(Losses.x + Losses.y, na.rm = T),
+    total_NumOT = sum(total_NumOT.x + total_NumOT.y, na.rm = T),
+    total_pts = sum(total_pts.x + total_pts.y, na.rm = T),
+    total_FGM = sum(total_FGM.x + total_FGM.y, na.rm = T),
+    total_FGA = sum(total_FGA.x + total_FGA.y, na.rm = T),
+    total_FGM3 = sum(total_FGM3.x + total_FGM3.y, na.rm = T),
+    total_FGA3 = sum(total_FGA3.x + total_FGA3.y, na.rm = T),
+    total_FTM = sum(total_FTM.x + total_FTM.y, na.rm = T),
+    total_FTA = sum(total_FTA.x + total_FTA.y, na.rm = T),
+    total_OffReb = sum(total_OffReb.x + total_OffReb.y, na.rm = T),
+    total_DefReb = sum(total_DefReb.x + total_DefReb.y, na.rm = T),
+    total_Ast = sum(total_Ast.x + total_Ast.y, na.rm = T),
+    total_TO = sum(total_TO.x + total_TO.y, na.rm = T),
+    total_Stl = sum(total_Stl.x + total_Stl.y, na.rm = T),
+    total_Blk = sum(total_Blk.x + total_Blk.y, na.rm = T),
+    total_PF = sum(total_PF.x + total_PF.y, na.rm = T)
+  )
+
+data_2004_0 <- win_2004 %>% 
+  full_join(loss_2004, by = c("TeamID", "Team_Name")) %>% 
+  group_by(TeamID, Team_Name) %>% 
+  summarise(
+    Season = Season.x,
+    Wins = sum(Wins.x + Wins.y, na.rm = T),
+    Losses = sum(Losses.x + Losses.y, na.rm = T),
+    total_NumOT = sum(total_NumOT.x + total_NumOT.y, na.rm = T),
+    total_pts = sum(total_pts.x + total_pts.y, na.rm = T),
+    total_FGM = sum(total_FGM.x + total_FGM.y, na.rm = T),
+    total_FGA = sum(total_FGA.x + total_FGA.y, na.rm = T),
+    total_FGM3 = sum(total_FGM3.x + total_FGM3.y, na.rm = T),
+    total_FGA3 = sum(total_FGA3.x + total_FGA3.y, na.rm = T),
+    total_FTM = sum(total_FTM.x + total_FTM.y, na.rm = T),
+    total_FTA = sum(total_FTA.x + total_FTA.y, na.rm = T),
+    total_OffReb = sum(total_OffReb.x + total_OffReb.y, na.rm = T),
+    total_DefReb = sum(total_DefReb.x + total_DefReb.y, na.rm = T),
+    total_Ast = sum(total_Ast.x + total_Ast.y, na.rm = T),
+    total_TO = sum(total_TO.x + total_TO.y, na.rm = T),
+    total_Stl = sum(total_Stl.x + total_Stl.y, na.rm = T),
+    total_Blk = sum(total_Blk.x + total_Blk.y, na.rm = T),
+    total_PF = sum(total_PF.x + total_PF.y, na.rm = T)
+  )
+
+data_2005_0 <- win_2005 %>% 
+  full_join(loss_2005, by = c("TeamID", "Team_Name")) %>% 
+  group_by(TeamID, Team_Name) %>% 
+  summarise(
+    Season = Season.x,
+    Wins = sum(Wins.x + Wins.y, na.rm = T),
+    Losses = sum(Losses.x + Losses.y, na.rm = T),
+    total_NumOT = sum(total_NumOT.x + total_NumOT.y, na.rm = T),
+    total_pts = sum(total_pts.x + total_pts.y, na.rm = T),
+    total_FGM = sum(total_FGM.x + total_FGM.y, na.rm = T),
+    total_FGA = sum(total_FGA.x + total_FGA.y, na.rm = T),
+    total_FGM3 = sum(total_FGM3.x + total_FGM3.y, na.rm = T),
+    total_FGA3 = sum(total_FGA3.x + total_FGA3.y, na.rm = T),
+    total_FTM = sum(total_FTM.x + total_FTM.y, na.rm = T),
+    total_FTA = sum(total_FTA.x + total_FTA.y, na.rm = T),
+    total_OffReb = sum(total_OffReb.x + total_OffReb.y, na.rm = T),
+    total_DefReb = sum(total_DefReb.x + total_DefReb.y, na.rm = T),
+    total_Ast = sum(total_Ast.x + total_Ast.y, na.rm = T),
+    total_TO = sum(total_TO.x + total_TO.y, na.rm = T),
+    total_Stl = sum(total_Stl.x + total_Stl.y, na.rm = T),
+    total_Blk = sum(total_Blk.x + total_Blk.y, na.rm = T),
+    total_PF = sum(total_PF.x + total_PF.y, na.rm = T)
+  )
+
+data_2006_0 <- win_2006 %>% 
+  full_join(loss_2006, by = c("TeamID", "Team_Name")) %>% 
+  group_by(TeamID, Team_Name) %>% 
+  summarise(
+    Season = Season.x,
+    Wins = sum(Wins.x + Wins.y, na.rm = T),
+    Losses = sum(Losses.x + Losses.y, na.rm = T),
+    total_NumOT = sum(total_NumOT.x + total_NumOT.y, na.rm = T),
+    total_pts = sum(total_pts.x + total_pts.y, na.rm = T),
+    total_FGM = sum(total_FGM.x + total_FGM.y, na.rm = T),
+    total_FGA = sum(total_FGA.x + total_FGA.y, na.rm = T),
+    total_FGM3 = sum(total_FGM3.x + total_FGM3.y, na.rm = T),
+    total_FGA3 = sum(total_FGA3.x + total_FGA3.y, na.rm = T),
+    total_FTM = sum(total_FTM.x + total_FTM.y, na.rm = T),
+    total_FTA = sum(total_FTA.x + total_FTA.y, na.rm = T),
+    total_OffReb = sum(total_OffReb.x + total_OffReb.y, na.rm = T),
+    total_DefReb = sum(total_DefReb.x + total_DefReb.y, na.rm = T),
+    total_Ast = sum(total_Ast.x + total_Ast.y, na.rm = T),
+    total_TO = sum(total_TO.x + total_TO.y, na.rm = T),
+    total_Stl = sum(total_Stl.x + total_Stl.y, na.rm = T),
+    total_Blk = sum(total_Blk.x + total_Blk.y, na.rm = T),
+    total_PF = sum(total_PF.x + total_PF.y, na.rm = T)
+  )
+
+data_2007_0 <- win_2007 %>% 
+  full_join(loss_2007, by = c("TeamID", "Team_Name")) %>% 
+  group_by(TeamID, Team_Name) %>% 
+  summarise(
+    Season = Season.x,
+    Wins = sum(Wins.x + Wins.y, na.rm = T),
+    Losses = sum(Losses.x + Losses.y, na.rm = T),
+    total_NumOT = sum(total_NumOT.x + total_NumOT.y, na.rm = T),
+    total_pts = sum(total_pts.x + total_pts.y, na.rm = T),
+    total_FGM = sum(total_FGM.x + total_FGM.y, na.rm = T),
+    total_FGA = sum(total_FGA.x + total_FGA.y, na.rm = T),
+    total_FGM3 = sum(total_FGM3.x + total_FGM3.y, na.rm = T),
+    total_FGA3 = sum(total_FGA3.x + total_FGA3.y, na.rm = T),
+    total_FTM = sum(total_FTM.x + total_FTM.y, na.rm = T),
+    total_FTA = sum(total_FTA.x + total_FTA.y, na.rm = T),
+    total_OffReb = sum(total_OffReb.x + total_OffReb.y, na.rm = T),
+    total_DefReb = sum(total_DefReb.x + total_DefReb.y, na.rm = T),
+    total_Ast = sum(total_Ast.x + total_Ast.y, na.rm = T),
+    total_TO = sum(total_TO.x + total_TO.y, na.rm = T),
+    total_Stl = sum(total_Stl.x + total_Stl.y, na.rm = T),
+    total_Blk = sum(total_Blk.x + total_Blk.y, na.rm = T),
+    total_PF = sum(total_PF.x + total_PF.y, na.rm = T)
+  )
+
+data_2008_0 <- win_2008 %>% 
+  full_join(loss_2008, by = c("TeamID", "Team_Name")) %>% 
+  group_by(TeamID, Team_Name) %>% 
+  summarise(
+    Season = Season.x,
+    Wins = sum(Wins.x + Wins.y, na.rm = T),
+    Losses = sum(Losses.x + Losses.y, na.rm = T),
+    total_NumOT = sum(total_NumOT.x + total_NumOT.y, na.rm = T),
+    total_pts = sum(total_pts.x + total_pts.y, na.rm = T),
+    total_FGM = sum(total_FGM.x + total_FGM.y, na.rm = T),
+    total_FGA = sum(total_FGA.x + total_FGA.y, na.rm = T),
+    total_FGM3 = sum(total_FGM3.x + total_FGM3.y, na.rm = T),
+    total_FGA3 = sum(total_FGA3.x + total_FGA3.y, na.rm = T),
+    total_FTM = sum(total_FTM.x + total_FTM.y, na.rm = T),
+    total_FTA = sum(total_FTA.x + total_FTA.y, na.rm = T),
+    total_OffReb = sum(total_OffReb.x + total_OffReb.y, na.rm = T),
+    total_DefReb = sum(total_DefReb.x + total_DefReb.y, na.rm = T),
+    total_Ast = sum(total_Ast.x + total_Ast.y, na.rm = T),
+    total_TO = sum(total_TO.x + total_TO.y, na.rm = T),
+    total_Stl = sum(total_Stl.x + total_Stl.y, na.rm = T),
+    total_Blk = sum(total_Blk.x + total_Blk.y, na.rm = T),
+    total_PF = sum(total_PF.x + total_PF.y, na.rm = T)
+  )
+
+data_2009_0 <- win_2009 %>% 
+  full_join(loss_2009, by = c("TeamID", "Team_Name")) %>% 
+  group_by(TeamID, Team_Name) %>% 
+  summarise(
+    Season = Season.x,
+    Wins = sum(Wins.x + Wins.y, na.rm = T),
+    Losses = sum(Losses.x + Losses.y, na.rm = T),
+    total_NumOT = sum(total_NumOT.x + total_NumOT.y, na.rm = T),
+    total_pts = sum(total_pts.x + total_pts.y, na.rm = T),
+    total_FGM = sum(total_FGM.x + total_FGM.y, na.rm = T),
+    total_FGA = sum(total_FGA.x + total_FGA.y, na.rm = T),
+    total_FGM3 = sum(total_FGM3.x + total_FGM3.y, na.rm = T),
+    total_FGA3 = sum(total_FGA3.x + total_FGA3.y, na.rm = T),
+    total_FTM = sum(total_FTM.x + total_FTM.y, na.rm = T),
+    total_FTA = sum(total_FTA.x + total_FTA.y, na.rm = T),
+    total_OffReb = sum(total_OffReb.x + total_OffReb.y, na.rm = T),
+    total_DefReb = sum(total_DefReb.x + total_DefReb.y, na.rm = T),
+    total_Ast = sum(total_Ast.x + total_Ast.y, na.rm = T),
+    total_TO = sum(total_TO.x + total_TO.y, na.rm = T),
+    total_Stl = sum(total_Stl.x + total_Stl.y, na.rm = T),
+    total_Blk = sum(total_Blk.x + total_Blk.y, na.rm = T),
+    total_PF = sum(total_PF.x + total_PF.y, na.rm = T)
+  )
+
+data_2010_0 <- win_2010 %>% 
+  full_join(loss_2010, by = c("TeamID", "Team_Name")) %>% 
+  group_by(TeamID, Team_Name) %>% 
+  summarise(
+    Season = Season.x,
+    Wins = sum(Wins.x + Wins.y, na.rm = T),
+    Losses = sum(Losses.x + Losses.y, na.rm = T),
+    total_NumOT = sum(total_NumOT.x + total_NumOT.y, na.rm = T),
+    total_pts = sum(total_pts.x + total_pts.y, na.rm = T),
+    total_FGM = sum(total_FGM.x + total_FGM.y, na.rm = T),
+    total_FGA = sum(total_FGA.x + total_FGA.y, na.rm = T),
+    total_FGM3 = sum(total_FGM3.x + total_FGM3.y, na.rm = T),
+    total_FGA3 = sum(total_FGA3.x + total_FGA3.y, na.rm = T),
+    total_FTM = sum(total_FTM.x + total_FTM.y, na.rm = T),
+    total_FTA = sum(total_FTA.x + total_FTA.y, na.rm = T),
+    total_OffReb = sum(total_OffReb.x + total_OffReb.y, na.rm = T),
+    total_DefReb = sum(total_DefReb.x + total_DefReb.y, na.rm = T),
+    total_Ast = sum(total_Ast.x + total_Ast.y, na.rm = T),
+    total_TO = sum(total_TO.x + total_TO.y, na.rm = T),
+    total_Stl = sum(total_Stl.x + total_Stl.y, na.rm = T),
+    total_Blk = sum(total_Blk.x + total_Blk.y, na.rm = T),
+    total_PF = sum(total_PF.x + total_PF.y, na.rm = T)
+  )
+
+data_2011_0 <- win_2011 %>% 
+  full_join(loss_2011, by = c("TeamID", "Team_Name")) %>% 
+  group_by(TeamID, Team_Name) %>% 
+  summarise(
+    Season = Season.x,
+    Wins = sum(Wins.x + Wins.y, na.rm = T),
+    Losses = sum(Losses.x + Losses.y, na.rm = T),
+    total_NumOT = sum(total_NumOT.x + total_NumOT.y, na.rm = T),
+    total_pts = sum(total_pts.x + total_pts.y, na.rm = T),
+    total_FGM = sum(total_FGM.x + total_FGM.y, na.rm = T),
+    total_FGA = sum(total_FGA.x + total_FGA.y, na.rm = T),
+    total_FGM3 = sum(total_FGM3.x + total_FGM3.y, na.rm = T),
+    total_FGA3 = sum(total_FGA3.x + total_FGA3.y, na.rm = T),
+    total_FTM = sum(total_FTM.x + total_FTM.y, na.rm = T),
+    total_FTA = sum(total_FTA.x + total_FTA.y, na.rm = T),
+    total_OffReb = sum(total_OffReb.x + total_OffReb.y, na.rm = T),
+    total_DefReb = sum(total_DefReb.x + total_DefReb.y, na.rm = T),
+    total_Ast = sum(total_Ast.x + total_Ast.y, na.rm = T),
+    total_TO = sum(total_TO.x + total_TO.y, na.rm = T),
+    total_Stl = sum(total_Stl.x + total_Stl.y, na.rm = T),
+    total_Blk = sum(total_Blk.x + total_Blk.y, na.rm = T),
+    total_PF = sum(total_PF.x + total_PF.y, na.rm = T)
+  )
+
+data_2012_0 <- win_2012 %>% 
+  full_join(loss_2012, by = c("TeamID", "Team_Name")) %>% 
+  group_by(TeamID, Team_Name) %>% 
+  summarise(
+    Season = Season.x,
+    Wins = sum(Wins.x + Wins.y, na.rm = T),
+    Losses = sum(Losses.x + Losses.y, na.rm = T),
+    total_NumOT = sum(total_NumOT.x + total_NumOT.y, na.rm = T),
+    total_pts = sum(total_pts.x + total_pts.y, na.rm = T),
+    total_FGM = sum(total_FGM.x + total_FGM.y, na.rm = T),
+    total_FGA = sum(total_FGA.x + total_FGA.y, na.rm = T),
+    total_FGM3 = sum(total_FGM3.x + total_FGM3.y, na.rm = T),
+    total_FGA3 = sum(total_FGA3.x + total_FGA3.y, na.rm = T),
+    total_FTM = sum(total_FTM.x + total_FTM.y, na.rm = T),
+    total_FTA = sum(total_FTA.x + total_FTA.y, na.rm = T),
+    total_OffReb = sum(total_OffReb.x + total_OffReb.y, na.rm = T),
+    total_DefReb = sum(total_DefReb.x + total_DefReb.y, na.rm = T),
+    total_Ast = sum(total_Ast.x + total_Ast.y, na.rm = T),
+    total_TO = sum(total_TO.x + total_TO.y, na.rm = T),
+    total_Stl = sum(total_Stl.x + total_Stl.y, na.rm = T),
+    total_Blk = sum(total_Blk.x + total_Blk.y, na.rm = T),
+    total_PF = sum(total_PF.x + total_PF.y, na.rm = T)
+  )
+
+data_2013_0 <- win_2013 %>% 
+  full_join(loss_2013, by = c("TeamID", "Team_Name")) %>% 
+  group_by(TeamID, Team_Name) %>% 
+  summarise(
+    Season = Season.x,
+    Wins = sum(Wins.x + Wins.y, na.rm = T),
+    Losses = sum(Losses.x + Losses.y, na.rm = T),
+    total_NumOT = sum(total_NumOT.x + total_NumOT.y, na.rm = T),
+    total_pts = sum(total_pts.x + total_pts.y, na.rm = T),
+    total_FGM = sum(total_FGM.x + total_FGM.y, na.rm = T),
+    total_FGA = sum(total_FGA.x + total_FGA.y, na.rm = T),
+    total_FGM3 = sum(total_FGM3.x + total_FGM3.y, na.rm = T),
+    total_FGA3 = sum(total_FGA3.x + total_FGA3.y, na.rm = T),
+    total_FTM = sum(total_FTM.x + total_FTM.y, na.rm = T),
+    total_FTA = sum(total_FTA.x + total_FTA.y, na.rm = T),
+    total_OffReb = sum(total_OffReb.x + total_OffReb.y, na.rm = T),
+    total_DefReb = sum(total_DefReb.x + total_DefReb.y, na.rm = T),
+    total_Ast = sum(total_Ast.x + total_Ast.y, na.rm = T),
+    total_TO = sum(total_TO.x + total_TO.y, na.rm = T),
+    total_Stl = sum(total_Stl.x + total_Stl.y, na.rm = T),
+    total_Blk = sum(total_Blk.x + total_Blk.y, na.rm = T),
+    total_PF = sum(total_PF.x + total_PF.y, na.rm = T)
+  )
+
+data_2014_0 <- win_2014 %>% 
+  full_join(loss_2014, by = c("TeamID", "Team_Name")) %>% 
+  group_by(TeamID, Team_Name) %>% 
+  summarise(
+    Season = Season.x,
+    Wins = sum(Wins.x + Wins.y, na.rm = T),
+    Losses = sum(Losses.x + Losses.y, na.rm = T),
+    total_NumOT = sum(total_NumOT.x + total_NumOT.y, na.rm = T),
+    total_pts = sum(total_pts.x + total_pts.y, na.rm = T),
+    total_FGM = sum(total_FGM.x + total_FGM.y, na.rm = T),
+    total_FGA = sum(total_FGA.x + total_FGA.y, na.rm = T),
+    total_FGM3 = sum(total_FGM3.x + total_FGM3.y, na.rm = T),
+    total_FGA3 = sum(total_FGA3.x + total_FGA3.y, na.rm = T),
+    total_FTM = sum(total_FTM.x + total_FTM.y, na.rm = T),
+    total_FTA = sum(total_FTA.x + total_FTA.y, na.rm = T),
+    total_OffReb = sum(total_OffReb.x + total_OffReb.y, na.rm = T),
+    total_DefReb = sum(total_DefReb.x + total_DefReb.y, na.rm = T),
+    total_Ast = sum(total_Ast.x + total_Ast.y, na.rm = T),
+    total_TO = sum(total_TO.x + total_TO.y, na.rm = T),
+    total_Stl = sum(total_Stl.x + total_Stl.y, na.rm = T),
+    total_Blk = sum(total_Blk.x + total_Blk.y, na.rm = T),
+    total_PF = sum(total_PF.x + total_PF.y, na.rm = T)
+  )
+
+data_2015_0 <- win_2015 %>% 
+  full_join(loss_2015, by = c("TeamID", "Team_Name")) %>% 
+  group_by(TeamID, Team_Name) %>% 
+  summarise(
+    Season = Season.x,
+    Wins = sum(Wins.x + Wins.y, na.rm = T),
+    Losses = sum(Losses.x + Losses.y, na.rm = T),
+    total_NumOT = sum(total_NumOT.x + total_NumOT.y, na.rm = T),
+    total_pts = sum(total_pts.x + total_pts.y, na.rm = T),
+    total_FGM = sum(total_FGM.x + total_FGM.y, na.rm = T),
+    total_FGA = sum(total_FGA.x + total_FGA.y, na.rm = T),
+    total_FGM3 = sum(total_FGM3.x + total_FGM3.y, na.rm = T),
+    total_FGA3 = sum(total_FGA3.x + total_FGA3.y, na.rm = T),
+    total_FTM = sum(total_FTM.x + total_FTM.y, na.rm = T),
+    total_FTA = sum(total_FTA.x + total_FTA.y, na.rm = T),
+    total_OffReb = sum(total_OffReb.x + total_OffReb.y, na.rm = T),
+    total_DefReb = sum(total_DefReb.x + total_DefReb.y, na.rm = T),
+    total_Ast = sum(total_Ast.x + total_Ast.y, na.rm = T),
+    total_TO = sum(total_TO.x + total_TO.y, na.rm = T),
+    total_Stl = sum(total_Stl.x + total_Stl.y, na.rm = T),
+    total_Blk = sum(total_Blk.x + total_Blk.y, na.rm = T),
+    total_PF = sum(total_PF.x + total_PF.y, na.rm = T)
+  )
+
+data_2016_0 <- win_2016 %>% 
+  full_join(loss_2016, by = c("TeamID", "Team_Name")) %>% 
+  group_by(TeamID, Team_Name) %>% 
+  summarise(
+    Season = Season.x,
+    Wins = sum(Wins.x + Wins.y, na.rm = T),
+    Losses = sum(Losses.x + Losses.y, na.rm = T),
+    total_NumOT = sum(total_NumOT.x + total_NumOT.y, na.rm = T),
+    total_pts = sum(total_pts.x + total_pts.y, na.rm = T),
+    total_FGM = sum(total_FGM.x + total_FGM.y, na.rm = T),
+    total_FGA = sum(total_FGA.x + total_FGA.y, na.rm = T),
+    total_FGM3 = sum(total_FGM3.x + total_FGM3.y, na.rm = T),
+    total_FGA3 = sum(total_FGA3.x + total_FGA3.y, na.rm = T),
+    total_FTM = sum(total_FTM.x + total_FTM.y, na.rm = T),
+    total_FTA = sum(total_FTA.x + total_FTA.y, na.rm = T),
+    total_OffReb = sum(total_OffReb.x + total_OffReb.y, na.rm = T),
+    total_DefReb = sum(total_DefReb.x + total_DefReb.y, na.rm = T),
+    total_Ast = sum(total_Ast.x + total_Ast.y, na.rm = T),
+    total_TO = sum(total_TO.x + total_TO.y, na.rm = T),
+    total_Stl = sum(total_Stl.x + total_Stl.y, na.rm = T),
+    total_Blk = sum(total_Blk.x + total_Blk.y, na.rm = T),
+    total_PF = sum(total_PF.x + total_PF.y, na.rm = T)
+  )
+
+data_2017_0 <- win_2017 %>% 
+  full_join(loss_2017, by = c("TeamID", "Team_Name")) %>% 
+  group_by(TeamID, Team_Name) %>% 
+  summarise(
+    Season = Season.x,
+    Wins = sum(Wins.x + Wins.y, na.rm = T),
+    Losses = sum(Losses.x + Losses.y, na.rm = T),
+    total_NumOT = sum(total_NumOT.x + total_NumOT.y, na.rm = T),
+    total_pts = sum(total_pts.x + total_pts.y, na.rm = T),
+    total_FGM = sum(total_FGM.x + total_FGM.y, na.rm = T),
+    total_FGA = sum(total_FGA.x + total_FGA.y, na.rm = T),
+    total_FGM3 = sum(total_FGM3.x + total_FGM3.y, na.rm = T),
+    total_FGA3 = sum(total_FGA3.x + total_FGA3.y, na.rm = T),
+    total_FTM = sum(total_FTM.x + total_FTM.y, na.rm = T),
+    total_FTA = sum(total_FTA.x + total_FTA.y, na.rm = T),
+    total_OffReb = sum(total_OffReb.x + total_OffReb.y, na.rm = T),
+    total_DefReb = sum(total_DefReb.x + total_DefReb.y, na.rm = T),
+    total_Ast = sum(total_Ast.x + total_Ast.y, na.rm = T),
+    total_TO = sum(total_TO.x + total_TO.y, na.rm = T),
+    total_Stl = sum(total_Stl.x + total_Stl.y, na.rm = T),
+    total_Blk = sum(total_Blk.x + total_Blk.y, na.rm = T),
+    total_PF = sum(total_PF.x + total_PF.y, na.rm = T)
+  )
+
+data_2018_0 <- win_2018 %>% 
+  full_join(loss_2018, by = c("TeamID", "Team_Name")) %>% 
+  group_by(TeamID, Team_Name) %>% 
+  summarise(
+    Season = Season.x,
+    Wins = sum(Wins.x + Wins.y, na.rm = T),
+    Losses = sum(Losses.x + Losses.y, na.rm = T),
+    total_NumOT = sum(total_NumOT.x + total_NumOT.y, na.rm = T),
+    total_pts = sum(total_pts.x + total_pts.y, na.rm = T),
+    total_FGM = sum(total_FGM.x + total_FGM.y, na.rm = T),
+    total_FGA = sum(total_FGA.x + total_FGA.y, na.rm = T),
+    total_FGM3 = sum(total_FGM3.x + total_FGM3.y, na.rm = T),
+    total_FGA3 = sum(total_FGA3.x + total_FGA3.y, na.rm = T),
+    total_FTM = sum(total_FTM.x + total_FTM.y, na.rm = T),
+    total_FTA = sum(total_FTA.x + total_FTA.y, na.rm = T),
+    total_OffReb = sum(total_OffReb.x + total_OffReb.y, na.rm = T),
+    total_DefReb = sum(total_DefReb.x + total_DefReb.y, na.rm = T),
+    total_Ast = sum(total_Ast.x + total_Ast.y, na.rm = T),
+    total_TO = sum(total_TO.x + total_TO.y, na.rm = T),
+    total_Stl = sum(total_Stl.x + total_Stl.y, na.rm = T),
+    total_Blk = sum(total_Blk.x + total_Blk.y, na.rm = T),
+    total_PF = sum(total_PF.x + total_PF.y, na.rm = T)
+  )
+
+data_2019_0 <- win_2019 %>% 
+  full_join(loss_2019, by = c("TeamID", "Team_Name")) %>% 
+  group_by(TeamID, Team_Name) %>% 
+  summarise(
+    Season = Season.x,
+    Wins = sum(Wins.x + Wins.y, na.rm = T),
+    Losses = sum(Losses.x + Losses.y, na.rm = T),
+    total_NumOT = sum(total_NumOT.x + total_NumOT.y, na.rm = T),
+    total_pts = sum(total_pts.x + total_pts.y, na.rm = T),
+    total_FGM = sum(total_FGM.x + total_FGM.y, na.rm = T),
+    total_FGA = sum(total_FGA.x + total_FGA.y, na.rm = T),
+    total_FGM3 = sum(total_FGM3.x + total_FGM3.y, na.rm = T),
+    total_FGA3 = sum(total_FGA3.x + total_FGA3.y, na.rm = T),
+    total_FTM = sum(total_FTM.x + total_FTM.y, na.rm = T),
+    total_FTA = sum(total_FTA.x + total_FTA.y, na.rm = T),
+    total_OffReb = sum(total_OffReb.x + total_OffReb.y, na.rm = T),
+    total_DefReb = sum(total_DefReb.x + total_DefReb.y, na.rm = T),
+    total_Ast = sum(total_Ast.x + total_Ast.y, na.rm = T),
+    total_TO = sum(total_TO.x + total_TO.y, na.rm = T),
+    total_Stl = sum(total_Stl.x + total_Stl.y, na.rm = T),
+    total_Blk = sum(total_Blk.x + total_Blk.y, na.rm = T),
+    total_PF = sum(total_PF.x + total_PF.y, na.rm = T)
+  )
+
+data_2020_0 <- win_2020 %>% 
+  full_join(loss_2020, by = c("TeamID", "Team_Name")) %>% 
+  group_by(TeamID, Team_Name) %>% 
+  summarise(
+    Season = Season.x,
+    Wins = sum(Wins.x + Wins.y, na.rm = T),
+    Losses = sum(Losses.x + Losses.y, na.rm = T),
+    total_NumOT = sum(total_NumOT.x + total_NumOT.y, na.rm = T),
+    total_pts = sum(total_pts.x + total_pts.y, na.rm = T),
+    total_FGM = sum(total_FGM.x + total_FGM.y, na.rm = T),
+    total_FGA = sum(total_FGA.x + total_FGA.y, na.rm = T),
+    total_FGM3 = sum(total_FGM3.x + total_FGM3.y, na.rm = T),
+    total_FGA3 = sum(total_FGA3.x + total_FGA3.y, na.rm = T),
+    total_FTM = sum(total_FTM.x + total_FTM.y, na.rm = T),
+    total_FTA = sum(total_FTA.x + total_FTA.y, na.rm = T),
+    total_OffReb = sum(total_OffReb.x + total_OffReb.y, na.rm = T),
+    total_DefReb = sum(total_DefReb.x + total_DefReb.y, na.rm = T),
+    total_Ast = sum(total_Ast.x + total_Ast.y, na.rm = T),
+    total_TO = sum(total_TO.x + total_TO.y, na.rm = T),
+    total_Stl = sum(total_Stl.x + total_Stl.y, na.rm = T),
+    total_Blk = sum(total_Blk.x + total_Blk.y, na.rm = T),
+    total_PF = sum(total_PF.x + total_PF.y, na.rm = T)
+  )
+```
+
+Prepping MM data for merge - DON'T NEED
+```{r}
+# mm2003_merge <- mm2003 %>% 
+#   dplyr::select(-Season)
+# mm2004_merge <- mm2004 %>% 
+#   dplyr::select(-Season)
+# mm2005_merge <- mm2005 %>% 
+#   dplyr::select(-Season)
+# mm2006_merge <- mm2006 %>% 
+#   dplyr::select(-Season)
+# mm2007_merge <- mm2007 %>% 
+#   dplyr::select(-Season)
+# mm2008_merge <- mm2008 %>% 
+#   dplyr::select(-Season)
+# mm2009_merge <- mm2009 %>% 
+#   dplyr::select(-Season)
+# mm2010_merge <- mm2010 %>% 
+#   dplyr::select(-Season)
+# mm2011_merge <- mm2011 %>% 
+#   dplyr::select(-Season)
+# mm2012_merge <- mm2012 %>% 
+#   dplyr::select(-Season)
+# mm2013_merge <- mm2013 %>% 
+#   dplyr::select(-Season)
+# mm2014_merge <- mm2014 %>% 
+#   dplyr::select(-Season)
+# mm2015_merge <- mm2015 %>% 
+#   dplyr::select(-Season)
+# mm2016_merge <- mm2016 %>% 
+#   dplyr::select(-Season)
+# mm2017_merge <- mm2017 %>% 
+#   dplyr::select(-Season)
+# mm2018_merge <- mm2018 %>% 
+#   dplyr::select(-Season)
+# mm2019_merge <- mm2019 %>% 
+#   dplyr::select(-Season)
+```
+
+```{r}
+data_2003_0 %>% 
+  left_join(mm2003, by = c("TeamID", "Team_Name")) %>% 
+  mutate(PostW = ifelse(is.na(PostW), 0, PostW)) %>% 
+  arrange(desc(PostW)) %>% 
+  mutate(PostW = as.factor(PostW))
+```
+
+
+## Merging Reg Season Data with PostW
+
+```{r}
+# Create a named vector with valid variable names
+labels <- c("First.Round.Exit", "Round.of.Thirty.Two", "Sweet.Sixteen", "Elite.Eight", "Final.Four", "Runner.Up", "Champion")
+names(labels) <- make.names(labels)
+```
+
+```{r}
+data_2003 <- data_2003_0 %>% 
+  left_join(mm2003, by = c("TeamID", "Team_Name")) %>% 
+  mutate(PostW = ifelse(is.na(PostW), 0, PostW)) %>% 
+  arrange(desc(PostW)) %>% 
+  mutate(PostW = factor(PostW, levels = 0:6, labels = c("First.Round.Exit", "Round.of.Thirty.Two", "Sweet.Sixteen", "Elite.Eight", "Final.Four", "Runner.Up", "Champion"), ordered = T)) %>% 
+  rename(Season = Season.x) %>% 
+  mutate(TeamID = as.character(TeamID), Season = as.character(Season), Wins = as.integer(Wins), Losses = as.integer(Losses)) %>% 
+  dplyr::select(-Season.y)
+
+data_2004 <- data_2004_0 %>% 
+  left_join(mm2004, by = c("TeamID", "Team_Name")) %>% 
+  mutate(PostW = ifelse(is.na(PostW), 0, PostW)) %>% 
+  arrange(desc(PostW)) %>% 
+  mutate(PostW = factor(PostW, levels = 0:6, labels = c("First.Round.Exit", "Round.of.Thirty.Two", "Sweet.Sixteen", "Elite.Eight", "Final.Four", "Runner.Up", "Champion"), ordered = T)) %>% 
+  rename(Season = Season.x) %>% 
+  mutate(TeamID = as.character(TeamID), Season = as.character(Season), Wins = as.integer(Wins), Losses = as.integer(Losses)) %>% 
+  dplyr::select(-Season.y)
+
+data_2005 <- data_2005_0 %>% 
+  left_join(mm2005, by = c("TeamID", "Team_Name")) %>% 
+  mutate(PostW = ifelse(is.na(PostW), 0, PostW)) %>% 
+  arrange(desc(PostW)) %>% 
+  mutate(PostW = factor(PostW, levels = 0:6, labels = c("First.Round.Exit", "Round.of.Thirty.Two", "Sweet.Sixteen", "Elite.Eight", "Final.Four", "Runner.Up", "Champion"), ordered = T)) %>% 
+  rename(Season = Season.x) %>% 
+  mutate(TeamID = as.character(TeamID), Season = as.character(Season), Wins = as.integer(Wins), Losses = as.integer(Losses)) %>% 
+  dplyr::select(-Season.y)
+
+data_2006 <- data_2006_0 %>% 
+  left_join(mm2006, by = c("TeamID", "Team_Name")) %>% 
+  mutate(PostW = ifelse(is.na(PostW), 0, PostW)) %>% 
+  arrange(desc(PostW)) %>% 
+  mutate(PostW = factor(PostW, levels = 0:6, labels = c("First.Round.Exit", "Round.of.Thirty.Two", "Sweet.Sixteen", "Elite.Eight", "Final.Four", "Runner.Up", "Champion"), ordered = T)) %>% 
+  rename(Season = Season.x) %>% 
+  mutate(TeamID = as.character(TeamID), Season = as.character(Season), Wins = as.integer(Wins), Losses = as.integer(Losses)) %>% 
+  dplyr::select(-Season.y)
+
+data_2007 <- data_2007_0 %>% 
+  left_join(mm2007, by = c("TeamID", "Team_Name")) %>% 
+  mutate(PostW = ifelse(is.na(PostW), 0, PostW)) %>% 
+  arrange(desc(PostW)) %>% 
+  mutate(PostW = factor(PostW, levels = 0:6, labels = c("First.Round.Exit", "Round.of.Thirty.Two", "Sweet.Sixteen", "Elite.Eight", "Final.Four", "Runner.Up", "Champion"), ordered = T)) %>% 
+  rename(Season = Season.x) %>% 
+  mutate(TeamID = as.character(TeamID), Season = as.character(Season), Wins = as.integer(Wins), Losses = as.integer(Losses)) %>% 
+  dplyr::select(-Season.y)
+
+data_2008 <- data_2008_0 %>% 
+  left_join(mm2008, by = c("TeamID", "Team_Name")) %>% 
+  mutate(PostW = ifelse(is.na(PostW), 0, PostW)) %>% 
+  arrange(desc(PostW)) %>% 
+  mutate(PostW = factor(PostW, levels = 0:6, labels = c("First.Round.Exit", "Round.of.Thirty.Two", "Sweet.Sixteen", "Elite.Eight", "Final.Four", "Runner.Up", "Champion"), ordered = T)) %>% 
+  rename(Season = Season.x) %>% 
+  mutate(TeamID = as.character(TeamID), Season = as.character(Season), Wins = as.integer(Wins), Losses = as.integer(Losses)) %>% 
+  dplyr::select(-Season.y)
+
+data_2009 <- data_2009_0 %>% 
+  left_join(mm2009, by = c("TeamID", "Team_Name")) %>% 
+  mutate(PostW = ifelse(is.na(PostW), 0, PostW)) %>% 
+  arrange(desc(PostW)) %>% 
+  mutate(PostW = factor(PostW, levels = 0:6, labels = c("First.Round.Exit", "Round.of.Thirty.Two", "Sweet.Sixteen", "Elite.Eight", "Final.Four", "Runner.Up", "Champion"), ordered = T)) %>% 
+  rename(Season = Season.x) %>% 
+  mutate(TeamID = as.character(TeamID), Season = as.character(Season), Wins = as.integer(Wins), Losses = as.integer(Losses)) %>% 
+  dplyr::select(-Season.y)
+
+data_2010 <- data_2010_0 %>% 
+  left_join(mm2010, by = c("TeamID", "Team_Name")) %>% 
+  mutate(PostW = ifelse(is.na(PostW), 0, PostW)) %>% 
+  arrange(desc(PostW)) %>% 
+  mutate(PostW = factor(PostW, levels = 0:6, labels = c("First.Round.Exit", "Round.of.Thirty.Two", "Sweet.Sixteen", "Elite.Eight", "Final.Four", "Runner.Up", "Champion"), ordered = T)) %>% 
+  rename(Season = Season.x) %>% 
+  mutate(TeamID = as.character(TeamID), Season = as.character(Season), Wins = as.integer(Wins), Losses = as.integer(Losses)) %>% 
+  dplyr::select(-Season.y)
+
+data_2011 <- data_2011_0 %>% 
+  left_join(mm2011, by = c("TeamID", "Team_Name")) %>% 
+  mutate(PostW = ifelse(is.na(PostW), 0, PostW)) %>% 
+  arrange(desc(PostW)) %>% 
+  mutate(PostW = factor(PostW, levels = 0:6, labels = c("First.Round.Exit", "Round.of.Thirty.Two", "Sweet.Sixteen", "Elite.Eight", "Final.Four", "Runner.Up", "Champion"), ordered = T)) %>% 
+  rename(Season = Season.x) %>% 
+  mutate(TeamID = as.character(TeamID), Season = as.character(Season), Wins = as.integer(Wins), Losses = as.integer(Losses)) %>% 
+  dplyr::select(-Season.y)
+
+data_2012 <- data_2012_0 %>% 
+  left_join(mm2012, by = c("TeamID", "Team_Name")) %>% 
+  mutate(PostW = ifelse(is.na(PostW), 0, PostW)) %>% 
+  arrange(desc(PostW)) %>% 
+  mutate(PostW = factor(PostW, levels = 0:6, labels = c("First.Round.Exit", "Round.of.Thirty.Two", "Sweet.Sixteen", "Elite.Eight", "Final.Four", "Runner.Up", "Champion"), ordered = T)) %>% 
+  rename(Season = Season.x) %>% 
+  mutate(TeamID = as.character(TeamID), Season = as.character(Season), Wins = as.integer(Wins), Losses = as.integer(Losses)) %>% 
+  dplyr::select(-Season.y)
+
+data_2013 <- data_2013_0 %>% 
+  left_join(mm2013, by = c("TeamID", "Team_Name")) %>% 
+  mutate(PostW = ifelse(is.na(PostW), 0, PostW)) %>% 
+  arrange(desc(PostW)) %>% 
+  mutate(PostW = factor(PostW, levels = 0:6, labels = c("First.Round.Exit", "Round.of.Thirty.Two", "Sweet.Sixteen", "Elite.Eight", "Final.Four", "Runner.Up", "Champion"), ordered = T)) %>% 
+  rename(Season = Season.x) %>% 
+  mutate(TeamID = as.character(TeamID), Season = as.character(Season), Wins = as.integer(Wins), Losses = as.integer(Losses)) %>% 
+  dplyr::select(-Season.y)
+
+data_2014 <- data_2014_0 %>% 
+  left_join(mm2014, by = c("TeamID", "Team_Name")) %>% 
+  mutate(PostW = ifelse(is.na(PostW), 0, PostW)) %>% 
+  arrange(desc(PostW)) %>% 
+  mutate(PostW = factor(PostW, levels = 0:6, labels = c("First.Round.Exit", "Round.of.Thirty.Two", "Sweet.Sixteen", "Elite.Eight", "Final.Four", "Runner.Up", "Champion"), ordered = T)) %>% 
+  rename(Season = Season.x) %>% 
+  mutate(TeamID = as.character(TeamID), Season = as.character(Season), Wins = as.integer(Wins), Losses = as.integer(Losses)) %>% 
+  dplyr::select(-Season.y)
+
+data_2015 <- data_2015_0 %>% 
+  left_join(mm2015, by = c("TeamID", "Team_Name")) %>% 
+  mutate(PostW = ifelse(is.na(PostW), 0, PostW)) %>% 
+  arrange(desc(PostW)) %>% 
+  mutate(PostW = factor(PostW, levels = 0:6, labels = c("First.Round.Exit", "Round.of.Thirty.Two", "Sweet.Sixteen", "Elite.Eight", "Final.Four", "Runner.Up", "Champion"), ordered = T)) %>% 
+  rename(Season = Season.x) %>% 
+  mutate(TeamID = as.character(TeamID), Season = as.character(Season), Wins = as.integer(Wins), Losses = as.integer(Losses)) %>% 
+  dplyr::select(-Season.y)
+
+data_2016 <- data_2016_0 %>% 
+  left_join(mm2016, by = c("TeamID", "Team_Name")) %>% 
+  mutate(PostW = ifelse(is.na(PostW), 0, PostW)) %>% 
+  arrange(desc(PostW)) %>% 
+  mutate(PostW = factor(PostW, levels = 0:6, labels = c("First.Round.Exit", "Round.of.Thirty.Two", "Sweet.Sixteen", "Elite.Eight", "Final.Four", "Runner.Up", "Champion"), ordered = T)) %>% 
+  rename(Season = Season.x) %>% 
+  mutate(TeamID = as.character(TeamID), Season = as.character(Season), Wins = as.integer(Wins), Losses = as.integer(Losses)) %>% 
+  dplyr::select(-Season.y)
+
+data_2017 <- data_2017_0 %>% 
+  left_join(mm2017, by = c("TeamID", "Team_Name")) %>% 
+  mutate(PostW = ifelse(is.na(PostW), 0, PostW)) %>% 
+  arrange(desc(PostW)) %>% 
+  mutate(PostW = factor(PostW, levels = 0:6, labels = c("First.Round.Exit", "Round.of.Thirty.Two", "Sweet.Sixteen", "Elite.Eight", "Final.Four", "Runner.Up", "Champion"), ordered = T)) %>% 
+  rename(Season = Season.x) %>% 
+  mutate(TeamID = as.character(TeamID), Season = as.character(Season), Wins = as.integer(Wins), Losses = as.integer(Losses)) %>% 
+  dplyr::select(-Season.y)
+
+data_2018 <- data_2018_0 %>% 
+  left_join(mm2018, by = c("TeamID", "Team_Name")) %>% 
+  mutate(PostW = ifelse(is.na(PostW), 0, PostW)) %>% 
+  arrange(desc(PostW)) %>% 
+  mutate(PostW = factor(PostW, levels = 0:6, labels = c("First.Round.Exit", "Round.of.Thirty.Two", "Sweet.Sixteen", "Elite.Eight", "Final.Four", "Runner.Up", "Champion"), ordered = T)) %>% 
+  rename(Season = Season.x) %>% 
+  mutate(TeamID = as.character(TeamID), Season = as.character(Season), Wins = as.integer(Wins), Losses = as.integer(Losses)) %>% 
+  dplyr::select(-Season.y)
+
+data_2019 <- data_2019_0 %>% 
+  left_join(mm2019, by = c("TeamID", "Team_Name")) %>% 
+  mutate(PostW = ifelse(is.na(PostW), 0, PostW)) %>% 
+  arrange(desc(PostW)) %>% 
+  mutate(PostW = factor(PostW, levels = 0:6, labels = c("First.Round.Exit", "Round.of.Thirty.Two", "Sweet.Sixteen", "Elite.Eight", "Final.Four", "Runner.Up", "Champion"), ordered = T)) %>% 
+  rename(Season = Season.x) %>% 
+  mutate(TeamID = as.character(TeamID), Season = as.character(Season), Wins = as.integer(Wins), Losses = as.integer(Losses)) %>% 
+  dplyr::select(-Season.y)
+
+data_2020 <- data_2020_0 %>% 
+  mutate(PostW = NA) %>% 
+  mutate(PostW = factor(PostW, levels = 0:6, labels = c("First.Round.Exit", "Round.of.Thirty.Two", "Sweet.Sixteen", "Elite.Eight", "Final.Four", "Runner.Up", "Champion"), ordered = T)) %>% 
+  mutate(TeamID = as.character(TeamID), Season = as.character(Season), Wins = as.integer(Wins), Losses = as.integer(Losses))
+```
+
+
+## Adding Sports Reference Data
+
+**Note** -> Pace, ORtg, STL%, ORB% not recorded until 2009-2010 season
+
+Want to add in SOS, SRS
+
+```{r}
+# Manually changed over 130 names to match
+sr2003 <- read_xlsx("Advanced CBB Data 2002-2003.xlsx") %>% 
+  rename(Team_Name = School)
+sr2004 <- read_xlsx("Advanced CBB Data 2003-2004.xlsx") %>% 
+  rename(Team_Name = School)
+sr2005 <- read_xlsx("Advanced CBB Data 2004-2005.xlsx") %>% 
+  rename(Team_Name = School)
+sr2006 <- read_xlsx("Advanced CBB Data 2005-2006.xlsx") %>% 
+  rename(Team_Name = School)
+sr2007 <- read_xlsx("Advanced CBB Data 2006-2007.xlsx") %>% 
+  rename(Team_Name = School)
+sr2008 <- read_xlsx("Advanced CBB Data 2007-2008.xlsx") %>% 
+  rename(Team_Name = School)
+sr2009 <- read_xlsx("Advanced CBB Data 2008-2009.xlsx") %>% 
+  rename(Team_Name = School)
+sr2010 <- read_xlsx("Advanced CBB Data 2009-2010.xlsx") %>% 
+  rename(Team_Name = School)
+sr2011 <- read_xlsx("Advanced CBB Data 2010-2011.xlsx") %>% 
+  rename(Team_Name = School)
+sr2012 <- read_xlsx("Advanced CBB Data 2011-2012.xlsx") %>% 
+  rename(Team_Name = School)
+sr2013 <- read_xlsx("Advanced CBB Data 2012-2013.xlsx") %>% 
+  rename(Team_Name = School)
+sr2014 <- read_xlsx("Advanced CBB Data 2013-2014.xlsx") %>% 
+  rename(Team_Name = School)
+sr2015 <- read_xlsx("Advanced CBB Data 2014-2015.xlsx") %>% 
+  rename(Team_Name = School)
+sr2016 <- read_xlsx("Advanced CBB Data 2015-2016.xlsx") %>% 
+  rename(Team_Name = School)
+sr2017 <- read_xlsx("Advanced CBB Data 2016-2017.xlsx") %>% 
+  rename(Team_Name = School)
+sr2018 <- read_xlsx("Advanced CBB Data 2017-2018.xlsx") %>% 
+  rename(Team_Name = School)
+sr2019 <- read_xlsx("Advanced CBB Data 2018-2019.xlsx") %>% 
+  rename(Team_Name = School)
+sr2020 <- read_xlsx("Advanced CBB Data 2019-2020.xlsx") %>%
+  rename(Team_Name = School)
+```
+
+```{r}
+fulldata_2003 <- data_2003 %>% 
+  left_join(sr2003, by = "Team_Name") %>% 
+  dplyr::select(-"School X") %>% 
+  filter(Team_Name != "Birmingham So")
+
+fulldata_2004 <- data_2004 %>% 
+  left_join(sr2004, by = "Team_Name") %>% 
+  dplyr::select(-"School X")
+
+fulldata_2005 <- data_2005 %>% 
+  left_join(sr2005, by = "Team_Name") %>% 
+  dplyr::select(-"School X")
+
+fulldata_2006 <- data_2006 %>% 
+  left_join(sr2006, by = "Team_Name") %>% 
+  dplyr::select(-"School X")
+
+fulldata_2007 <- data_2007 %>% 
+  left_join(sr2007, by = "Team_Name") %>% 
+  dplyr::select(-"School X")
+
+fulldata_2008 <- data_2008 %>% 
+  left_join(sr2008, by = "Team_Name") %>% 
+  dplyr::select(-"School X") %>% 
+  filter(Team_Name != "Houston Bap")
+
+fulldata_2009 <- data_2009 %>% 
+  left_join(sr2009, by = "Team_Name") %>% 
+  dplyr::select(-"School X") %>% 
+  filter(!(Team_Name %in% c("North Dakota", "Seattle", "South Dakota"))) 
+
+fulldata_2010 <- data_2010 %>% 
+  left_join(sr2010, by = "Team_Name") %>% 
+  dplyr::select(-"School X")
+
+fulldata_2011 <- data_2011 %>% 
+  left_join(sr2011, by = "Team_Name") %>% 
+  dplyr::select(-"School X")
+
+fulldata_2012 <- data_2012 %>% 
+  left_join(sr2012, by = "Team_Name") %>% 
+  dplyr::select(-"School X") %>% 
+  filter(Team_Name != "NE Omaha")
+
+fulldata_2013 <- data_2013 %>% 
+  left_join(sr2013, by = "Team_Name") %>% 
+  dplyr::select(-"School X")
+
+fulldata_2014 <- data_2014 %>% 
+  left_join(sr2014, by = "Team_Name") %>% 
+  dplyr::select(-"School X")
+
+fulldata_2015 <- data_2015 %>% 
+  left_join(sr2015, by = "Team_Name") %>% 
+  dplyr::select(-"School X")
+
+fulldata_2016 <- data_2016 %>% 
+  left_join(sr2016, by = "Team_Name") %>% 
+  dplyr::select(-"School X")
+
+fulldata_2017 <- data_2017 %>% 
+  left_join(sr2017, by = "Team_Name") %>% 
+  dplyr::select(-"School X")
+
+fulldata_2018 <- data_2018 %>% 
+  left_join(sr2018, by = "Team_Name") %>% 
+  dplyr::select(-"School X")
+
+fulldata_2019 <- data_2019 %>% 
+  left_join(sr2019, by = "Team_Name") %>% 
+  dplyr::select(-"School X")
+
+fulldata_2020 <- data_2020 %>% 
+  left_join(sr2020, by = "Team_Name") %>% 
+  dplyr::select(-"School X")
+```
