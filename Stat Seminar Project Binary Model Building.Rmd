@@ -1,0 +1,439 @@
+---
+title: "Stat Seminar Project Binary Model Building"
+author: "Joe Coyne"
+date: "`r Sys.Date()`"
+output: word_document
+---
+  
+```{r setup1}
+library(rpart)
+```
+
+```{r}
+rmarkdown::render("Stat Seminar Project Data Exploration.Rmd")
+```
+
+## Preparing Data for Modeling
+```{r}
+mm2003_full <- fulldata_2003 %>% 
+  filter(TeamID %in% mm2003$TeamID) %>% 
+  ungroup()
+
+mm2004_full <- fulldata_2004 %>% 
+  filter(TeamID %in% mm2004$TeamID) %>% 
+  ungroup()
+
+mm2005_full <- fulldata_2005 %>% 
+  filter(TeamID %in% mm2005$TeamID) %>% 
+  ungroup()
+
+mm2006_full <- fulldata_2006 %>% 
+  filter(TeamID %in% mm2006$TeamID) %>% 
+  ungroup()
+
+mm2007_full <- fulldata_2007 %>% 
+  filter(TeamID %in% mm2007$TeamID) %>% 
+  ungroup()
+
+mm2008_full <- fulldata_2008 %>% 
+  filter(TeamID %in% mm2008$TeamID) %>% 
+  ungroup()
+
+mm2009_full <- fulldata_2009 %>% 
+  filter(TeamID %in% mm2009$TeamID) %>% 
+  ungroup()
+
+mm2010_full <- fulldata_2010 %>% 
+  filter(TeamID %in% mm2010$TeamID) %>% 
+  ungroup()
+
+mm2011_full <- fulldata_2011 %>% 
+  filter(TeamID %in% mm2011$TeamID) %>% 
+  ungroup()
+
+mm2012_full <- fulldata_2012 %>% 
+  filter(TeamID %in% mm2012$TeamID) %>% 
+  ungroup()
+
+mm2013_full <- fulldata_2013 %>% 
+  filter(TeamID %in% mm2013$TeamID) %>% 
+  ungroup()
+
+mm2014_full <- fulldata_2014 %>% 
+  filter(TeamID %in% mm2014$TeamID) %>% 
+  ungroup()
+
+mm2015_full <- fulldata_2015 %>% 
+  filter(TeamID %in% mm2015$TeamID) %>% 
+  ungroup()
+
+mm2016_full <- fulldata_2016 %>% 
+  filter(TeamID %in% mm2016$TeamID) %>% 
+  ungroup()
+
+mm2017_full <- fulldata_2017 %>% 
+  filter(TeamID %in% mm2017$TeamID) %>% 
+  ungroup()
+
+mm2018_full <- fulldata_2018 %>% 
+  filter(TeamID %in% mm2018$TeamID) %>% 
+  ungroup()
+
+mm2019_full <- fulldata_2019 %>% 
+  filter(TeamID %in% mm2019$TeamID) %>% 
+  ungroup()
+```
+
+```{r}
+all_data <- rbind(mm2003_full, mm2004_full, mm2005_full, mm2006_full, mm2007_full, mm2008_full, mm2009_full, mm2010_full, mm2011_full, mm2012_full, mm2013_full, mm2014_full, mm2015_full, mm2016_full, mm2017_full, mm2018_full, mm2019_full)
+```
+
+```{r}
+all_data_binary <- all_data %>% 
+  mutate(PostW_binary = ifelse(PostW == "First.Round.Exit", 0, 1)) %>% 
+  mutate(PostW_binary = as.factor(PostW_binary))
+```
+
+
+
+### Removing Multicollinearity
+try Principle Component Analysis (PCA) for multicollinearity
+
+```{r}
+cor(all_data_binary %>% dplyr::select(is.numeric))
+```
+
+
+```{r}
+all_data_binary_numeric <- all_data_binary %>% 
+  dplyr::select(-c(TeamID, Season, Team_Name, PostW, Losses, total_pts, total_FGM, total_FGA, eFG_percent, total_FTA, total_FGA3, total_Ast, total_TO, `FT/FGA`, total_FGM3))
+#, total_pts, total_FGA, total_FGA3, total_FTA, total_OffReb, total_FTM, PostW, "FT/FGA", "TOV%", "eFG%", "AST%", "3PAr"))  # removed for multicollinearity
+
+# cor(all_data_binary_numeric %>% 
+#       dplyr::select(-"PostW_binary"))
+
+# Assuming all_data_numeric contains your predictors and PostW
+predictors_binary <- all_data_binary_numeric[, -which(names(all_data_binary_numeric) == "PostW_binary")]
+all_data_scaled <- cbind(all_data_binary_numeric["PostW_binary"], predictors_binary)
+
+# Assuming your_data is your tbl_df and model is your regression model
+# Replace predictor1, predictor2, etc., with the actual names of your predictors
+model_all_data_binary <- lm(as.numeric(PostW_binary) ~ ., data = all_data_scaled)
+
+# Calculate VIF
+vif_values <- car::vif(model_all_data_binary)
+vif_values
+```
+
+### Jackknife - LOOCV
+LOOCV = leave one out cross validation
+
+k-fold cross validation - jackknife --> leave one out (LOO)
+```{r}
+levels(all_data_binary_numeric$PostW_binary) <- c("level_0", "level_1")
+
+# Load libraries
+library(caret)
+library(MASS)
+library(MLmetrics)
+
+set.seed(123)  # Set seed for reproducibility
+
+# Define the training control for cross-validation
+ctrl <- trainControl(
+  method = "cv",  # Cross-validation method ("cv" for k-fold, "LOOCV" for leave-one-out)
+  number = 20,     # Number of folds or leave-one-out for LOOCV
+  summaryFunction = twoClassSummary,  # For ordinal outcomes
+  classProbs = TRUE,  # For probability estimates
+  verboseIter = TRUE  # Display progress
+)
+
+# Specify the model
+model_all_data_binary_jk <- caret::train(
+  PostW_binary ~ .,
+  data = all_data_binary_numeric,
+  method = "glm",  # Ordinal logistic regression
+  trControl = ctrl,
+  family = "binomial"
+)
+
+# Print the results
+print(model_all_data_binary_jk)
+
+# Access additional information (e.g., confusion matrix, variable importance)
+confusionMatrix(model_all_data_binary_jk)
+varImp(model_all_data_binary_jk)
+
+summary(model_all_data_binary_jk)
+```
+Accuracy (average) : 0.6599 -- BEST ACCURACY (BUT NOT GREAT AT PREDICTING FIRST ROUND EXIT)
+
+
+## Partitioning Data
+```{r}
+set.seed(123)
+parts_binary = createDataPartition(all_data_binary_numeric$PostW_binary, p = .5, list = F)
+train_binary = all_data_binary_numeric[parts_binary, ]
+test_binary = all_data_binary_numeric[-parts_binary, ]
+```
+
+### Decision Tree
+```{r}
+DT.binary <- rpart(formula = PostW_binary ~ .,data = train_binary[parts_binary,],
+                   control=rpart.control(cp=0.001))
+
+cp.seq_bin=DT.binary$cptable[,1]
+
+MISC_bin<-numeric()
+
+# Loop over different complexity parameters
+for (i in 1:length(cp.seq_bin)) {
+  # Prune the decision tree
+  DT.predict_bin <- predict(prune(DT.binary, cp = cp.seq_bin[i]), newdata = test_binary, type = "class")
+  
+  # Create a confusion matrix
+  cm_bin <- table(DT.predict_bin, test_binary$PostW_binary)
+  
+  # Calculate misclassification rate
+  MISC_bin[i] <- (cm_bin[1, 2] + cm_bin[2, 1]) / sum(cm_bin)
+}
+
+# Find the optimal tree by choosing the complexity parameter with the minimum misclassification rate
+tree.final_bin <- prune(DT.binary, cp = cp.seq_bin[MISC_bin == min(MISC_bin)])
+
+# Make predictions on the test set
+tree.class_bin <- predict(tree.final_bin, newdata = test_binary, type = "class")
+tree.prob_bin <- predict(tree.final_bin, newdata = test_binary, type = "prob")[, 2]
+
+# Plot the Decision Tree
+par(mar = c(0, 0, 0, 0))
+plot(DT.binary)
+text(DT.binary)
+
+# Create confusion matrix
+confusionMatrix(tree.class_bin, test_binary$PostW_binary)
+```
+Accuracy : 0.6449
+
+
+
+### Stepwise Selection
+```{r}
+set.seed(123)
+null.glm_binary <- glm(PostW_binary ~ 1, family = binomial, data=(train_binary))
+full.glm_binary <- glm(PostW_binary~., family = binomial, data=(train_binary))
+reg.step_binary <- step(null.glm_binary, scope=list(lowr=null.glm_binary, upper=full.glm_binary), direction = "both")
+summary(reg.step_binary)
+
+reg.step_binary_pred <- predict(reg.step_binary, test_binary, type = "response")
+reg.step_binary_class <- ifelse(reg.step_binary_pred > 0.5, 1, 0)
+
+confusion_matrix_binary_step <- table(reg.step_binary_class, test_binary$PostW_binary)
+
+accuracy_binary_step <- sum(diag(confusion_matrix_binary_step)) / sum(confusion_matrix_binary_step)
+
+print(confusion_matrix_binary_step)
+cat("Accuracy:", accuracy_binary_step, "\n")
+```
+Accuracy: 0.6572438
+
+
+### ANN
+```{r}
+# all_data_binary_numeric_ann <- all_data_binary_numeric
+# 
+# vars.ann<-attr(terms(reg.step_binary), "term.labels") # extract variable names from bwd model
+# vars.ann <- sub("`TRB%`", "TRB%", vars.ann)
+# 
+# ## Standardization ## 
+# library(caret)
+# ScaleParams_binary <- preProcess(all_data_binary_numeric_ann[parts_binary, vars.ann], method=c("center", "scale"))
+# all_data_binary_numeric_ann <- all_data_binary_numeric_ann %>% predict(ScaleParams_binary, .)
+# 
+# ## Hot encoding ##
+# str(all_data_binary_numeric_ann)
+# dummy_binary <- dummyVars( ~ ., data = all_data_binary_numeric_ann[parts_binary, c(vars.ann, "PostW_binary")], fullRank = TRUE)
+# all_data_binary_numeric_ann.encode<- all_data_binary_numeric_ann %>% predict(dummy_binary, .)  
+# 
+# x.train_binary <- all_data_binary_numeric_ann.encode[parts_binary, -ncol(all_data_binary_numeric_ann.encode)] 
+# 
+# y.train_binary <- all_data_binary_numeric_ann.encode[parts_binary,"PostW_binary.level_1"]
+# y.train_binary <- matrix(y.train_binary, ncol = 1)
+# 
+# x.valid_binary <- all_data_binary_numeric_ann.encode[!parts_binary, -ncol(all_data_binary_numeric_ann.encode)] 
+# 
+# y.valid_binary <- all_data_binary_numeric_ann.encode[!parts_binary,"PostW_binary.level_1"]
+# 
+# 
+# library(tensorflow)
+# library(keras)
+# 
+# set_random_seed(42)
+# ann <- keras_model_sequential() %>% 
+#   layer_dense(units = 4, activation = "tanh", input_shape = c(7)) %>% 
+#   layer_dense(units = 1, activation = "sigmoid")
+# 
+# 
+# 
+# ann %>% compile(
+#   loss = "binary_crossentropy",
+#   optimizer = "adam",
+#   metrics = c("accuracy")
+# )
+# 
+# 
+# 
+# callbacks.list = list(
+#   callback_model_checkpoint(filepath="PostW_ann_binary.h5", 
+#                             monitor = "val_loss", 
+#                             save_best_only = TRUE, 
+#   ))
+# 
+# 
+# history <- ann %>% fit(
+#   x= x.train_binary,
+#   y= y.train_binary,
+#   epochs = 40,
+#   validation_data = list(x.valid_binary, y.valid_binary),
+#   verbose = 1,
+#   callbacks = callbacks.list
+# )
+# 
+# 
+# ann.select<- load_model_hdf5("PostW_ann_binary.h5") 
+```
+
+```{r}
+# ## part 3 ##
+# 
+# ## Prediction ##
+# ann.prob<-ann.select %>% predict(x.valid)
+# 
+# rocCurve.ann <- roc(organics$TargetBuy[!split], as.vector(ann.prob), quiet=TRUE)
+# annThresh <-  coords(rocCurve.ann, x = "best", best.method = "closest.topleft", transpose = FALSE)
+# ann.class <- as.factor(ifelse(ann.prob >= annThresh$threshold, 1,0))
+# ann.fscore<-confusionMatrix(ann.class,organics$TargetBuy[!split],
+#                             positive = "1")$byClass["F1"]
+# 
+# ann.fscore  # best f-score=0.5805485
+# 
+# confusionMatrix(ann.class,organics$TargetBuy[!split],
+#                 positive = "1")
+```
+
+
+### Random Forest Model
+```{r}
+library(randomForest)
+set.seed(123)
+# RF_binary <- randomForest(PostW_binary ~., data=all_data_binary_numeric,
+#                    ntree = 1000,  # number of trees
+#                    importance = TRUE)  # allows you to track variable importance
+
+
+names(train_binary)[names(train_binary) == 'TS%'] <- 'TS_percent'
+
+names(train_binary)[names(train_binary) == 'TRB%'] <- 'TRB_percent'
+
+names(train_binary)[names(train_binary) == 'BLK%'] <- 'BLK_percent'
+
+names(train_binary)[names(train_binary) == 'AST%'] <- 'AST_percent'
+
+names(train_binary)[names(train_binary) == '3PAr'] <- 'Three_PAr'
+
+names(train_binary)[names(train_binary) == 'TOV%'] <- 'TOV_percent'
+
+# Build the random forest model
+RF_binary <- randomForest(PostW_binary ~ ., data = train_binary,
+                          ntree = 1000, importance = TRUE)
+
+# Print and plot the model
+print(RF_binary)
+plot(RF_binary)
+
+# Rename 'TRB_percent' back to 'TRB%'
+names(train_binary)[names(train_binary) == 'TS_percent'] <- 'TS%'
+names(train_binary)[names(train_binary) == 'TRB_percent'] <- 'TRB%'
+names(train_binary)[names(train_binary) == 'BLK_percent'] <- 'BLK%'
+names(train_binary)[names(train_binary) == 'AST_percent'] <- 'AST%'
+names(train_binary)[names(train_binary) == 'Three_PAr'] <- '3PAr'
+names(train_binary)[names(train_binary) == 'TOV_percent'] <- 'TOV%'
+```
+OOB estimate of  error rate: 36.75%
+
+```{r}
+# Plot error rate
+plot(RF_binary$err.rate[,1], type="l", col="black", ylab="Error Rate", xlab="Number of Trees", main="Random Forest Error Rate Plot") # OOB
+lines(RF_binary$err.rate[,2], col="red") # level_0
+lines(RF_binary$err.rate[,3], col="green") # level_1
+legend("topright", legend=c("Out Of Bag Error", "PostW_binary = 0", "PostW_binary = 1"), col=c("black", "red", "green"), lty=1)
+```
+
+
+```{r}
+names(test_binary)[names(test_binary) == 'TS%'] <- 'TS_percent'
+
+names(test_binary)[names(test_binary) == 'TRB%'] <- 'TRB_percent'
+
+names(test_binary)[names(test_binary) == 'BLK%'] <- 'BLK_percent'
+
+names(test_binary)[names(test_binary) == 'AST%'] <- 'AST_percent'
+
+names(test_binary)[names(test_binary) == '3PAr'] <- 'Three_PAr'
+
+names(test_binary)[names(test_binary) == 'TOV%'] <- 'TOV_percent'
+
+
+# Assuming split.down_03_06 is your training data
+# Assuming PostW is your response variable
+y_actual_rf_binary <- test_binary$PostW_binary
+
+# Predict using the trained model
+y_pred_rf_binary <- predict(RF_binary, newdata = test_binary)
+
+# Create a confusion matrix
+conf_matrix_rf_binary <- confusionMatrix(y_pred_rf_binary, y_actual_rf_binary)
+
+# Extract accuracy
+accuracy_rf_binary <- conf_matrix_rf_binary$overall["Accuracy"]
+
+# Print the confusion matrix
+print(conf_matrix_rf_binary)
+
+# Print accuracy
+cat("Accuracy:", accuracy_rf_binary, "\n")
+```
+Accuracy: 0.6590106 -- BEST ACCURACY + FIRST ROUND EXIT PREDICTIONS
+
+
+
+## Applying Random Forest Model
+```{r}
+names(all_data)[names(all_data) == 'TS%'] <- 'TS_percent'
+names(all_data)[names(all_data) == 'TRB%'] <- 'TRB_percent'
+names(all_data)[names(all_data) == 'BLK%'] <- 'BLK_percent'
+names(all_data)[names(all_data) == 'AST%'] <- 'AST_percent'
+names(all_data)[names(all_data) == '3PAr'] <- 'Three_PAr'
+names(all_data)[names(all_data) == 'TOV%'] <- 'TOV_percent'
+
+# Assuming 'model_all_data_binary_jk' is your trained model and 'new_data' is the dataset you want to make predictions on
+all_data$predictions_binary <- predict(RF_binary, newdata = all_data, type = "response")
+
+
+# 'predictions' will contain the predicted probabilities or class labels depending on your model type
+# If it's a binary classification model, you'll get class labels (0 or 1)
+# If it's a probability model, you'll get probabilities
+
+# If you want to filter rows where PostW_binary = 1
+multiclass_data <- all_data[all_data$predictions_binary == "level_1", ]
+
+table(all_data$PostW)
+```
+
+```{r}
+table(multiclass_data$PostW)
+
+table(multiclass_data$PostW)["First.Round.Exit"] / sum(table(multiclass_data$PostW))
+```
+First.Round.Exit 
+0.1538462
